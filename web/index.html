@@ -42,6 +42,99 @@ details>summary{cursor:pointer}.inline-actions{display:flex;align-items:flex-end
 @media(max-width:480px){.wrap{padding:11px 10px 16px}.brand{font-size:18px}.top{gap:8px}.top-subtitle{font-size:10px}.top-actions{gap:5px}.top-actions button{font-size:11px;padding:7px 9px}.grid{gap:8px}.card{padding:12px;border-radius:15px;margin-bottom:9px}.big{font-size:17px}.tabs{margin-top:9px}.tab{padding:7px 10px;font-size:12px}.formgrid{grid-template-columns:1fr}.vps-details{gap:4px}.vps-value{font-size:10px}.user-link{grid-template-columns:1fr auto auto}.section-title{align-items:center}.section-title .actions{justify-content:flex-end}.section-title p{max-width:230px}.profile-actions button{flex:1}.logbox{max-height:220px}.background-actions{width:100%}}
 @media(prefers-reduced-transparency:reduce){body[data-background="custom"] .card,body[data-background="custom"] .tabs,body[data-background="custom"] .user,body[data-background="custom"] .logbox{background-color:rgba(255,255,255,.94);-webkit-backdrop-filter:none;backdrop-filter:none}body[data-theme="dark"][data-background="custom"] .card,body[data-theme="dark"][data-background="custom"] .tabs,body[data-theme="dark"][data-background="custom"] .user,body[data-theme="dark"][data-background="custom"] .logbox{background-color:rgba(26,30,39,.96)}}
 </style>
+<style id="compact-ui">
+/* Compact, calm layout: fewer oversized surfaces, same features. */
+#app.wrap{width:min(980px,100%);margin:0 auto;padding:14px 16px 18px}
+#app .top{gap:12px;padding:9px 13px;margin-bottom:8px;border-radius:14px;box-shadow:0 4px 14px rgba(23,32,51,.07)}
+#app .brand{font-size:18px;letter-spacing:-.4px}
+#app .top-subtitle{display:none}
+#app .top-actions{gap:6px}
+#app .top-actions button{padding:6px 10px;font-size:12px}
+#app .tabs{position:sticky;top:6px;z-index:10;gap:3px;margin:7px 0 8px;padding:3px;border-radius:12px}
+#app .tab{padding:6px 10px;border-radius:9px;font-size:12px}
+#app .section{scroll-margin-top:56px}
+#app .grid{gap:8px}
+#app .card{padding:12px;margin-bottom:8px;border-radius:14px;box-shadow:0 4px 14px rgba(23,32,51,.06)}
+body[data-background="custom"] #app .top,body[data-background="custom"] #app .file-picker{background-color:var(--glass);border-color:color-mix(in srgb,var(--surface) 56%,transparent);-webkit-backdrop-filter:blur(16px) saturate(145%);backdrop-filter:blur(16px) saturate(145%)}
+body[data-background="custom"] #app .card{box-shadow:0 7px 20px rgba(25,35,55,.12),inset 0 1px rgba(255,255,255,.42)}
+body[data-theme="dark"][data-background="custom"] #app .card{box-shadow:0 8px 22px rgba(0,0,0,.25),inset 0 1px rgba(255,255,255,.10)}
+#app h2{margin-bottom:3px;font-size:15px}
+#app h3{margin-bottom:6px;font-size:13px}
+#app .section-title{gap:8px}
+#app .section-title p{margin-top:3px}
+#app .big{font-size:17px}
+#app .metric-label{margin-bottom:3px;font-size:10px}
+#app .metric-sub{margin-top:3px;font-size:11px}
+#app .vps-details{gap:6px;margin-top:8px;padding-top:8px}
+#app .formgrid,#app .stack{gap:8px}
+#app .field{gap:4px}
+#app .field label{font-size:11px}
+#app input,#app select,#app textarea{padding:8px 9px;border-radius:9px;font-size:12px}
+#app button{padding:7px 10px;border-radius:9px}
+#app button.ghost{padding-inline:7px}
+#app .profile-list{gap:8px;margin-top:9px}
+#app .user{padding:10px;border-radius:12px}
+#app .profile-card{gap:8px}
+#app .profile-name{font-size:13px}
+#app .profile-meta{font-size:10px}
+#app .pill{padding:3px 7px;font-size:10px}
+#app .mapping-box{padding:7px 9px;font-size:11px}
+#app .profile-actions{gap:5px}
+#app .profile-actions button{min-height:32px;padding:6px 8px;font-size:11px}
+#app .edit-details{padding-top:7px}
+#app .user-link{gap:5px;margin:6px 0}
+#app .user-link input{font-size:10px}
+#app .user-actions{gap:5px;margin-top:7px}
+#app .user-actions button,#app .user-link button{padding:6px 8px;font-size:11px}
+#app .logbox{max-height:190px;padding:9px 10px;border-radius:10px;font-size:10px;line-height:1.5}
+#app .log-hint{margin:3px 0 7px;font-size:10px}
+#app .dialog{border-radius:14px}
+.dialog-inner{padding:13px}
+#app .background-controls{gap:8px}
+#app .custom-preview{height:88px;border-radius:11px}
+#app .background-actions{gap:5px}
+#app .background-actions button,#app .file-picker{padding:6px 9px;font-size:11px}
+#app .footer{padding:8px 2px 3px}
+#login.wrap{width:min(360px,100%);padding:8vh 16px 16px}
+#login .card{padding:15px;border-radius:14px}
+#login .brand{font-size:18px}
+#login .stack{gap:8px}
+#login input{padding:9px 10px}
+@media(max-width:760px){
+  #app.wrap{padding:10px 12px 14px}
+  #app .grid{gap:7px}
+  #app .card{padding:10px}
+  #app .top{padding:8px 11px}
+  #app .section-title p{max-width:260px}
+  #app .background-controls{grid-template-columns:1fr}
+  #app .custom-preview{height:76px}
+}
+@media(max-width:480px){
+  #app.wrap{padding:7px 9px 12px}
+  #app .top{padding:7px 9px}
+  #app .brand{font-size:16px}
+  #app .top-actions{gap:4px}
+  #app .top-actions button{padding:6px 8px;font-size:11px}
+  #app .tabs{top:3px;margin:5px 0 7px;overflow-x:auto}
+  #app .tab{padding:6px 9px;font-size:11px}
+  #app .grid{gap:6px}
+  #app .card{padding:9px;margin-bottom:6px;border-radius:12px}
+  #app .big{font-size:16px}
+  #app .formgrid{grid-template-columns:1fr}
+  #app .vps-details{gap:4px}
+  #app .profile-list{grid-template-columns:1fr}
+  #app .profile-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}
+  #app .profile-actions button{flex:initial}
+  #app .section-title{align-items:flex-start;gap:6px}
+  #app .section-title p{max-width:210px;font-size:10px}
+  #app .actions{gap:6px}
+  #app .user-link{grid-template-columns:minmax(0,1fr) auto auto}
+  #app .logbox{max-height:170px}
+  #app .dialog-inner{padding:11px}
+  #app .custom-preview{height:64px}
+}
+@media(prefers-reduced-motion:reduce){#app .section{animation:none}}
+</style>
 </head>
 <body>
 <div id="backdrop" aria-hidden="true"></div>

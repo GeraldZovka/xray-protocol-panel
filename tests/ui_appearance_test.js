@@ -43,6 +43,16 @@ assert.match(html, /© 2026 Gerald Zovka[\s\S]*?Repositori proyek/, 'footer uses
 assert.doesNotMatch(html, /Panel lokal untuk mengelola konektivitas server/, 'old footer text is removed');
 assert.doesNotMatch(script, /addEventListener\(['"]scroll/, 'background scaling is not changed by a scroll listener');
 
+const compactStyle = html.match(/<style id="compact-ui">([\s\S]*?)<\/style>/)?.[1];
+assert.ok(compactStyle, 'compact layout overrides are present');
+assert.match(compactStyle, /#app\.wrap\{width:min\(980px,100%\);margin:0 auto;padding:14px 16px 18px\}/, 'main layout uses a narrower, compact canvas');
+assert.match(compactStyle, /#app \.top-subtitle\{display:none\}/, 'decorative header subtitle is removed to simplify the header');
+assert.match(compactStyle, /#app \.tabs\{position:sticky;/, 'compact navigation stays reachable while scrolling');
+assert.match(compactStyle, /@media\(max-width:480px\)[\s\S]*?#app \.profile-actions\{display:grid;/, 'profile actions use a compact phone layout');
+assert.match(compactStyle, /body\[data-background="custom"\] #app \.top,body\[data-background="custom"\] #app \.file-picker\{background-color:var\(--glass\)[^}]*backdrop-filter:blur\(16px\) saturate\(145%\)/, 'custom backgrounds keep liquid-glass header and picker surfaces');
+assert.match(compactStyle, /#app \.custom-preview\{height:88px/, 'custom background preview is compact');
+assert.match(script, /action:'mldsa65'/, 'per-inbound ML-DSA control remains available');
+
 const validatorLine = script.match(/^async function validateBackgroundFile\(file\)\{[^\n]*\}$/m)?.[0];
 assert.ok(validatorLine, 'image validator is present');
 let dimensions = [1920, 1080];
