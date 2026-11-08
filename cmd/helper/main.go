@@ -3,11 +3,15 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,21 +29,28 @@ const xrayInstallSHA256 = "a562d1287cd7bf2871023d4c81bd9031c56fa132956067ba1de12
 const xrayInstallURL = "https://raw.githubusercontent.com/XTLS/Xray-install/" + xrayInstallRevision + "/install-release.sh"
 
 type request struct {
-	Action    string `json:"action"`
-	Config    string `json:"config,omitempty"`
-	Operation string `json:"operation,omitempty"`
+	Action     string `json:"action"`
+	Config     string `json:"config,omitempty"`
+	Operation  string `json:"operation,omitempty"`
+	Target     string `json:"target,omitempty"`
+	ServerName string `json:"serverName,omitempty"`
 }
 type response struct {
-	OK      bool   `json:"ok"`
-	Error   string `json:"error,omitempty"`
-	Status  string `json:"status,omitempty"`
-	Version string `json:"version,omitempty"`
-	Uptime  string `json:"uptime,omitempty"`
-	CPU     string `json:"cpu,omitempty"`
-	Load    string `json:"load,omitempty"`
-	RAM     string `json:"ram,omitempty"`
-	Disk    string `json:"disk,omitempty"`
-	Logs    string `json:"logs,omitempty"`
+	OK                bool   `json:"ok"`
+	Error             string `json:"error,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Version           string `json:"version,omitempty"`
+	Uptime            string `json:"uptime,omitempty"`
+	CPU               string `json:"cpu,omitempty"`
+	Load              string `json:"load,omitempty"`
+	RAM               string `json:"ram,omitempty"`
+	Disk              string `json:"disk,omitempty"`
+	Logs              string `json:"logs,omitempty"`
+	MLDSA65Seed       string `json:"mldsa65Seed,omitempty"`
+	MLDSA65Verify     string `json:"mldsa65Verify,omitempty"`
+	TargetChainBytes  int    `json:"targetChainBytes,omitempty"`
+	TargetPostQuantum bool   `json:"targetPostQuantum,omitempty"`
+	TargetSNIValid    bool   `json:"targetSniValid,omitempty"`
 }
 
 func main() {
@@ -73,6 +84,10 @@ func main() {
 		out = service(req.Operation)
 	case "update":
 		out = update()
+	case "mldsa65":
+		out = generateMLDSA65()
+	case "probeRealityTarget":
+		out = probeRealityTarget(req.Target, req.ServerName)
 	default:
 		out = response{Error: "aksi helper tidak diizinkan"}
 	}
@@ -440,4 +455,202 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func generateMLDSA65() response {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, xrayPath, "mldsa65").Output()
+	if err != nil {
+		return response{Error: "gagal menjalankan generator ML-DSA-65"}
+	}
+	seed, verify, err := parseMLDSA65Output(string(out))
+	if err != nil {
+		return response{Error: "output generator ML-DSA-65 tidak valid"}
+	}
+	return response{OK: true, MLDSA65Seed: seed, MLDSA65Verify: verify}
+}
+
+func parseMLDSA65Output(output string) (string, string, error) {
+	var seed, verify string
+	for _, line := range strings.Split(output, "\n") {
+		name, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		value = strings.TrimSpace(value)
+		switch name {
+		case "seed":
+			if seed != "" {
+				return "", "", fmt.Errorf("duplicate seed")
+			}
+			seed = value
+		case "verify":
+			if verify != "" {
+				return "", "", fmt.Errorf("duplicate verifier")
+			}
+			verify = value
+		}
+	}
+	seedBytes, err := base64.RawURLEncoding.Strict().DecodeString(seed)
+	if err != nil || len(seedBytes) != 32 {
+		return "", "", fmt.Errorf("invalid seed")
+	}
+	verifyBytes, err := base64.RawURLEncoding.Strict().DecodeString(verify)
+	if err != nil || len(verifyBytes) != 1952 {
+		return "", "", fmt.Errorf("invalid verifier")
+	}
+	return seed, verify, nil
+}
+
+func probeRealityTarget(target, serverName string) response {
+	if !validMLDSAHostname(target) || !validMLDSAHostname(serverName) || !strings.EqualFold(target, serverName) {
+		return response{Error: "target harus hostname publik port 443 dengan SNI yang sama"}
+	}
+	ips, err := net.LookupIP(target)
+	if err != nil || len(ips) == 0 {
+		return response{Error: "DNS target tidak dapat diresolusikan"}
+	}
+	var chosen net.IP
+	for _, ip := range ips {
+		if !isPublicTargetIP(ip) {
+			return response{Error: "DNS target mengandung alamat non-publik; probe dibatalkan"}
+		}
+		if chosen == nil || (chosen.To4() == nil && ip.To4() != nil) {
+			chosen = append(net.IP(nil), ip...)
+		}
+	}
+	if chosen == nil {
+		return response{Error: "DNS target tidak memiliki alamat publik yang dapat diuji"}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, xrayPath, "tls", "ping", "-ip", chosen.String(), target).CombinedOutput()
+	if err != nil {
+		return response{Error: "xray tls ping gagal menguji target"}
+	}
+	chainBytes, postQuantum, sniValid, err := parseRealityTargetOutput(string(out), serverName)
+	if err != nil {
+		return response{Error: "hasil probe TLS target tidak lengkap"}
+	}
+	return response{OK: true, TargetChainBytes: chainBytes, TargetPostQuantum: postQuantum, TargetSNIValid: sniValid}
+}
+
+func validMLDSAHostname(name string) bool {
+	if name == "" || len(name) > 253 || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
+		return false
+	}
+	labels := strings.Split(name, ".")
+	if len(labels) < 2 {
+		return false
+	}
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-') {
+				return false
+			}
+		}
+	}
+	return net.ParseIP(name) == nil
+}
+
+func isPublicTargetIP(ip net.IP) bool {
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return false
+	}
+	addr = addr.Unmap()
+	if !addr.IsValid() || !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified() {
+		return false
+	}
+	for _, block := range []string{
+		"100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15",
+		"198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32",
+	} {
+		prefix, err := netip.ParsePrefix(block)
+		if err == nil && prefix.Contains(addr) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseRealityTargetOutput(output, serverName string) (int, bool, bool, error) {
+	lower := strings.ToLower(output)
+	marker := strings.LastIndex(lower, "pinging with sni")
+	if marker < 0 {
+		return 0, false, false, fmt.Errorf("missing SNI probe section")
+	}
+	section := output[marker:]
+	lowerSection := strings.ToLower(section)
+
+	chainLabel := "certificate chain's total length:"
+	chainAt := strings.Index(lowerSection, chainLabel)
+	if chainAt < 0 {
+		return 0, false, false, fmt.Errorf("missing certificate chain length")
+	}
+	chainText := strings.TrimSpace(section[chainAt+len(chainLabel):])
+	chainToken := strings.Fields(chainText)
+	if len(chainToken) == 0 {
+		return 0, false, false, fmt.Errorf("empty certificate chain length")
+	}
+	chainBytes, err := strconv.Atoi(strings.Trim(chainToken[0], "[],:"))
+	if err != nil || chainBytes <= 0 {
+		return 0, false, false, fmt.Errorf("invalid certificate chain length")
+	}
+
+	pqLabel := "tls post-quantum key exchange:"
+	pqAt := strings.Index(lowerSection, pqLabel)
+	if pqAt < 0 {
+		return 0, false, false, fmt.Errorf("missing post-quantum result")
+	}
+	pqText := strings.TrimSpace(section[pqAt+len(pqLabel):])
+	pqFields := strings.Fields(strings.ToLower(pqText))
+	postQuantum := len(pqFields) > 0 && pqFields[0] == "true"
+
+	domainsLabel := "cert's allowed domains:"
+	domainsAt := strings.Index(lowerSection, domainsLabel)
+	if domainsAt < 0 {
+		return 0, false, false, fmt.Errorf("missing certificate names")
+	}
+	domainsStart := domainsAt + len(domainsLabel)
+	domainsEnd := strings.Index(section[domainsStart:], "]")
+	if domainsEnd < 0 {
+		return 0, false, false, fmt.Errorf("unterminated certificate names")
+	}
+	domainText := strings.TrimLeft(section[domainsStart:domainsStart+domainsEnd], " \t\r\n[")
+	sniValid := false
+	for _, name := range strings.Fields(strings.ReplaceAll(domainText, ",", " ")) {
+		name = strings.Trim(name, " \t\r\n[]")
+		if certificateCovers(serverName, name) {
+			sniValid = true
+			break
+		}
+	}
+	return chainBytes, postQuantum, sniValid, nil
+}
+
+func certificateCovers(name, pattern string) bool {
+	name = strings.TrimSuffix(strings.ToLower(name), ".")
+	pattern = strings.TrimSuffix(strings.ToLower(pattern), ".")
+	if name == "" || pattern == "" {
+		return false
+	}
+	if name == pattern {
+		return true
+	}
+	if !strings.HasPrefix(pattern, "*.") {
+		return false
+	}
+	suffix := pattern[1:]
+	if !strings.HasSuffix(name, suffix) {
+		return false
+	}
+	label := strings.TrimSuffix(name, suffix)
+	return label != "" && !strings.Contains(label, ".")
 }

@@ -73,16 +73,17 @@ type publicUser struct {
 	Links     []publicLink `json:"links"`
 }
 type publicInbound struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Enabled      bool     `json:"enabled"`
-	Protocol     string   `json:"protocol"`
-	InternalPort int      `json:"internalPort"`
-	Mode         string   `json:"mode"`
-	NATMappings  []string `json:"natMappings"`
-	SNI          string   `json:"sni"`
-	Dest         string   `json:"dest"`
-	XHTTPPath    string   `json:"xhttpPath"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Enabled        bool     `json:"enabled"`
+	Protocol       string   `json:"protocol"`
+	InternalPort   int      `json:"internalPort"`
+	Mode           string   `json:"mode"`
+	NATMappings    []string `json:"natMappings"`
+	SNI            string   `json:"sni"`
+	Dest           string   `json:"dest"`
+	XHTTPPath      string   `json:"xhttpPath"`
+	MLDSA65Enabled bool     `json:"mldsa65Enabled"`
 }
 type publicState struct {
 	CSRF               string          `json:"csrf"`
@@ -102,21 +103,28 @@ type publicState struct {
 	BackgroundRevision string          `json:"backgroundRevision"`
 }
 type helperRequest struct {
-	Action    string `json:"action"`
-	Config    string `json:"config,omitempty"`
-	Operation string `json:"operation,omitempty"`
+	Action     string `json:"action"`
+	Config     string `json:"config,omitempty"`
+	Operation  string `json:"operation,omitempty"`
+	Target     string `json:"target,omitempty"`
+	ServerName string `json:"serverName,omitempty"`
 }
 type helperResponse struct {
-	OK      bool   `json:"ok"`
-	Error   string `json:"error,omitempty"`
-	Status  string `json:"status,omitempty"`
-	Version string `json:"version,omitempty"`
-	Uptime  string `json:"uptime,omitempty"`
-	CPU     string `json:"cpu,omitempty"`
-	Load    string `json:"load,omitempty"`
-	RAM     string `json:"ram,omitempty"`
-	Disk    string `json:"disk,omitempty"`
-	Logs    string `json:"logs,omitempty"`
+	OK                bool   `json:"ok"`
+	Error             string `json:"error,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Version           string `json:"version,omitempty"`
+	Uptime            string `json:"uptime,omitempty"`
+	CPU               string `json:"cpu,omitempty"`
+	Load              string `json:"load,omitempty"`
+	RAM               string `json:"ram,omitempty"`
+	Disk              string `json:"disk,omitempty"`
+	Logs              string `json:"logs,omitempty"`
+	MLDSA65Seed       string `json:"mldsa65Seed,omitempty"`
+	MLDSA65Verify     string `json:"mldsa65Verify,omitempty"`
+	TargetChainBytes  int    `json:"targetChainBytes,omitempty"`
+	TargetPostQuantum bool   `json:"targetPostQuantum,omitempty"`
+	TargetSNIValid    bool   `json:"targetSniValid,omitempty"`
 }
 
 type backupFile struct {
@@ -130,6 +138,8 @@ type backupFile struct {
 	RealityPrivateKey string           `json:"realityPrivateKey"`
 	RealityPublicKey  string           `json:"realityPublicKey"`
 	RealityShortID    string           `json:"realityShortId"`
+	MLDSA65Seed       string           `json:"mldsa65Seed,omitempty"`
+	MLDSA65Verify     string           `json:"mldsa65Verify,omitempty"`
 }
 
 func run() error {
@@ -367,6 +377,14 @@ func validateStoredState(st appState) error {
 	if err := validateManagedInbounds(st); err != nil {
 		return err
 	}
+	if st.MLDSA65Seed != "" || st.MLDSA65Verify != "" {
+		if effectiveInboundProtocol(st.Settings) != "vless" {
+			return errors.New("ML-DSA-65 hanya didukung pada inbound VLESS + REALITY")
+		}
+		if err := validateMLDSA65Pair(st.MLDSA65Seed, st.MLDSA65Verify); err != nil {
+			return fmt.Errorf("pasangan kunci ML-DSA-65 inbound utama tidak valid: %w", err)
+		}
+	}
 	if st.RealityPrivateKey == "" || st.RealityPublicKey == "" || !shortIDRE.MatchString(st.RealityShortID) {
 		return errors.New("material REALITY tidak lengkap")
 	}
@@ -465,6 +483,7 @@ func (s *server) handleState(w http.ResponseWriter, r *http.Request) {
 			Protocol: effectiveInboundProtocol(st.Settings), InternalPort: st.Settings.InternalPort,
 			Mode: primaryMode, NATMappings: effectiveNATMappings(st.Settings),
 			SNI: st.Settings.SNI, Dest: st.Settings.Dest, XHTTPPath: st.Settings.XHTTPPath,
+			MLDSA65Enabled: st.MLDSA65Seed != "",
 		})
 	}
 	for _, in := range st.Inbounds {
@@ -476,7 +495,7 @@ func (s *server) handleState(w http.ResponseWriter, r *http.Request) {
 		if name == "" {
 			name = strings.ToUpper(in.Protocol) + " " + strconv.Itoa(in.InternalPort)
 		}
-		inbounds = append(inbounds, publicInbound{ID: in.ID, Name: name, Enabled: in.Enabled, Protocol: in.Protocol, InternalPort: in.InternalPort, Mode: mode, NATMappings: in.NATMappings, SNI: in.SNI, Dest: in.Dest, XHTTPPath: in.XHTTPPath})
+		inbounds = append(inbounds, publicInbound{ID: in.ID, Name: name, Enabled: in.Enabled, Protocol: in.Protocol, InternalPort: in.InternalPort, Mode: mode, NATMappings: in.NATMappings, SNI: in.SNI, Dest: in.Dest, XHTTPPath: in.XHTTPPath, MLDSA65Enabled: in.MLDSA65Seed != ""})
 	}
 	out := publicState{CSRF: csrf, Settings: st.Settings, Inbounds: inbounds, Users: users, Running: resp.Status == "active", Version: resp.Version, Uptime: resp.Uptime, CPU: resp.CPU, Load: resp.Load, RAM: resp.RAM, Disk: resp.Disk, Logs: logs, HTTPS: isHTTPS(r), BackgroundMode: st.BackgroundMode, BackgroundRevision: backgroundRevision(st.BackgroundImage)}
 	writeJSON(w, http.StatusOK, out)
@@ -597,6 +616,8 @@ func (s *server) handleAction(w http.ResponseWriter, r *http.Request) {
 		err = s.toggleInbound(raw)
 	case "reloadInbound":
 		result, err = s.reloadInbound(raw)
+	case "mldsa65":
+		result, err = s.setMLDSA65(raw)
 	case "inboundMappings":
 		err = s.updateInboundMappings(raw)
 	case "changePassword":
@@ -878,12 +899,13 @@ func (s *server) handleBackup(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	st := s.state
 	s.mu.Unlock()
-	b := backupFile{Schema: st.Schema, Settings: st.Settings, Users: st.Users, Inbounds: st.Inbounds, PrimaryDeleted: st.PrimaryDeleted, BackgroundMode: st.BackgroundMode, BackgroundImage: st.BackgroundImage, RealityPrivateKey: st.RealityPrivateKey, RealityPublicKey: st.RealityPublicKey, RealityShortID: st.RealityShortID}
+	b := backupFile{Schema: st.Schema, Settings: st.Settings, Users: st.Users, Inbounds: st.Inbounds, PrimaryDeleted: st.PrimaryDeleted, BackgroundMode: st.BackgroundMode, BackgroundImage: st.BackgroundImage, RealityPrivateKey: st.RealityPrivateKey, RealityPublicKey: st.RealityPublicKey, RealityShortID: st.RealityShortID, MLDSA65Seed: st.MLDSA65Seed, MLDSA65Verify: st.MLDSA65Verify}
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		writeError(w, 500, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=xray-panel-backup-%s.json", time.Now().UTC().Format("20060102T150405Z")))
 	_, _ = w.Write(data)
@@ -1005,7 +1027,13 @@ func (s *server) updateSettings(raw map[string]json.RawMessage) error {
 		}
 		in.PublicHost, in.PublicPort = host, port
 	}
-	return s.transact(func(st *appState) error { st.Settings = in; return validateSettings(st.Settings) })
+	return s.transact(func(st *appState) error {
+		if st.MLDSA65Seed != "" && (in.SNI != st.Settings.SNI || in.Dest != st.Settings.Dest) {
+			return errors.New("nonaktifkan ML-DSA-65 terlebih dahulu sebelum mengubah target atau SNI")
+		}
+		st.Settings = in
+		return validateSettings(st.Settings)
+	})
 }
 
 func parseAddInboundRequest(raw map[string]json.RawMessage) (string, int, error) {
@@ -1339,10 +1367,21 @@ func (s *server) restore(raw map[string]json.RawMessage) error {
 	if b.Schema != 1 {
 		return errors.New("versi backup tidak didukung")
 	}
+	s.mu.Lock()
+	adminHash := s.state.AdminHash
+	s.mu.Unlock()
+	candidate := appState{Schema: b.Schema, Settings: b.Settings, Users: b.Users, Inbounds: b.Inbounds, PrimaryDeleted: b.PrimaryDeleted, BackgroundMode: b.BackgroundMode, BackgroundImage: b.BackgroundImage, AdminHash: adminHash, RealityPrivateKey: b.RealityPrivateKey, RealityPublicKey: b.RealityPublicKey, RealityShortID: b.RealityShortID, MLDSA65Seed: b.MLDSA65Seed, MLDSA65Verify: b.MLDSA65Verify}
+	if err := validateStoredState(candidate); err != nil {
+		return err
+	}
+	if err := validateStoredMLDSATargets(candidate); err != nil {
+		return err
+	}
 	return s.transact(func(st *appState) error {
 		hash := st.AdminHash
-		*st = appState{Schema: b.Schema, Settings: b.Settings, Users: b.Users, Inbounds: b.Inbounds, PrimaryDeleted: b.PrimaryDeleted, BackgroundMode: b.BackgroundMode, BackgroundImage: b.BackgroundImage, AdminHash: hash, RealityPrivateKey: b.RealityPrivateKey, RealityPublicKey: b.RealityPublicKey, RealityShortID: b.RealityShortID}
-		return validateStoredState(*st)
+		*st = candidate
+		st.AdminHash = hash
+		return nil
 	})
 }
 func (s *server) transact(change func(*appState) error) error {
@@ -1514,8 +1553,10 @@ func redact(text, private string) string {
 }
 func redactState(text string, st appState) string {
 	text = redact(text, st.RealityPrivateKey)
+	text = redact(text, st.MLDSA65Seed)
 	for _, inbound := range st.Inbounds {
 		text = redact(text, inbound.RealityPrivateKey)
+		text = redact(text, inbound.MLDSA65Seed)
 	}
 	return text
 }

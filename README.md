@@ -82,7 +82,13 @@ Purge total menghapus konfigurasi aktif, kunci REALITY, pengguna, state/backup p
 
 Profil utama **VLESS + TCP + REALITY + Vision** selalu dipertahankan. Admin dapat membuat banyak inbound tambahan **VLESS + TCP + REALITY + Vision**, **VLESS + XHTTP + REALITY**, **VMess**, atau **Shadowsocks**; port listener harus unik. Setiap profil VLESS mempunyai material REALITY sendiri dan XHTTP juga mempunyai path tersendiri. Menambah profil tidak mengganti UUID user atau key profil lain. Flow Vision hanya dipasang pada profil VLESS TCP.
 
-Setiap pengguna memperoleh tautan dan QR yang sesuai dengan protokol/transport untuk setiap endpoint lengkap; endpoint numerik sementara belum menghasilkan tautan klien. URI hanya berisi material publik; kunci privat REALITY tidak dikirim melalui API status, tautan, atau QR. Berkas cadangan menyimpan kunci privat setiap profil dan harus diperlakukan sebagai rahasia.
+Setiap pengguna memperoleh tautan dan QR yang sesuai dengan protokol/transport untuk setiap endpoint lengkap; endpoint numerik sementara belum menghasilkan tautan klien. URI hanya berisi material publik; kunci privat REALITY dan seed ML-DSA-65 tidak dikirim melalui API status, tautan, atau QR. Verifier ML-DSA-65 (`pqv`) adalah material publik dan hanya ditambahkan ke tautan baru saat fitur diaktifkan. Berkas cadangan menyimpan kunci privat dan seed setiap profil yang menggunakannya, sehingga harus diperlakukan sebagai rahasia.
+
+### Dukungan opsional ML-DSA-65
+
+Fitur ini mati secara default dan tidak mengubah profil, tautan, atau pengguna lama. Tombol pada kartu VLESS menjalankan pemeriksaan terhadap target REALITY saat itu: hostname publik port 443, SNI sama dengan hostname, nama sertifikat cocok, rantai sertifikat lebih dari 3500 byte, dan negosiasi X25519MLKEM768. Bila lolos, pasangan kunci dibuat oleh `xray mldsa65` di server; server menyimpan seed privat, sementara tautan baru menyertakan verifier publik sebagai parameter `pqv`. Kode [import/export v2rayNG 2.3.14](https://github.com/2dust/v2rayNG/blob/2.3.14/V2rayNG/app/src/main/java/com/v2ray/ang/fmt/FmtBase.kt) memetakan `pqv` ke `mldsa65Verify`, tetapi itu hanya membuktikan pemetaan URI—bukan handshake nyata. Referensi: [konfigurasi REALITY resmi](https://xtls.github.io/en/config/transports/reality.html) dan [perintah Xray](https://xtls.github.io/en/document/command.html).
+
+Pemeriksaan target bukan pengujian handshake klien dan tidak memverifikasi ASN atau kestabilan jangka panjang. Pastikan aplikasi klien benar-benar mempertahankan dan memakai `pqv`, lalu uji pada perangkat nyata sebelum mengganti tautan yang digunakan. Perubahan pada profil aktif memulai ulang layanan Xray dan dapat memutus koneksi sesaat; pengaturan profil yang sedang berhenti disimpan tanpa restart. Mematikan fitur hanya mengubah tautan yang dibuat setelahnya—tautan yang sudah diimpor ke klien tidak diperbarui otomatis.
 
 ## Panel dan fitur
 
@@ -94,7 +100,7 @@ Setiap pengguna memperoleh tautan dan QR yang sesuai dengan protokol/transport u
 - Profil utama VLESS TCP Vision serta inbound yang sudah ada dipertahankan. Profil tambahan mendukung VLESS TCP/XHTTP, VMess, dan Shadowsocks; setiap port internal harus unik.
 - Setiap inbound dapat memiliki endpoint publik sendiri untuk tautan/QR. Xray menjalankan `xray run -test -config` pada seluruh konfigurasi gabungan sebelum penerapan; jika uji atau restart gagal, helper root memulihkan konfigurasi sebelumnya.
 - Pilihan tema, warna latar, dan gambar khusus berada di Pengaturan. Gambar serta pilihan latar disimpan pada data privat di server dan digunakan bersama di semua perangkat; gambar memenuhi latar, sementara permukaan liquid-glass menjaga teks tetap terbaca.
-- Cadangan berupa berkas JSON berisi kunci REALITY privat tiap inbound, UUID pengguna, penetapan profil, pengaturan latar, dan konfigurasi untuk pemulihan. Berkas ini bersifat rahasia: simpan dalam keadaan terenkripsi dan jangan unggah ke repositori.
+- Cadangan berupa berkas JSON berisi kunci REALITY privat, seed ML-DSA-65 jika aktif, UUID pengguna, penetapan profil, pengaturan latar, dan konfigurasi untuk pemulihan. Berkas ini bersifat rahasia: simpan dalam keadaan terenkripsi dan jangan unggah ke repositori.
 - Dukungan HTTPS: installer dapat membuat sertifikat self-signed bernama `xray-panel.local`, atau memakai pasangan sertifikat/kunci yang Anda sediakan. Sertifikat self-signed tidak cocok dengan hostname panel sehingga browser akan menampilkan peringatan. Untuk HTTPS tepercaya, sediakan sertifikat yang cocok dengan hostname panel atau gunakan reverse proxy TLS. Tanpa TLS, panel menampilkan peringatan HTTP.
 
 ### Pengaturan TLS setelah install
@@ -109,11 +115,11 @@ Untuk reverse proxy HTTPS, bind panel ke loopback (default instalasi baru) denga
 
 ## Keamanan dan pilihan desain
 
-- Proses panel berjalan sebagai user Linux non-root `xray-panel`. Satu helper root yang root-owned hanya menerima aksi JSON tetap: apply config, status/log, start/stop/restart Xray, dan update resmi. Sudoers tidak memberi shell atau perintah bebas; helper juga menolak semua argumen command line.
+- Proses panel berjalan sebagai user Linux non-root `xray-panel`. Satu helper root yang root-owned hanya menerima aksi JSON tetap: apply config, status/log, start/stop/restart Xray, update resmi, generator ML-DSA-65, dan probe target publik yang mematok hasil DNS ke alamat publik serta memeriksa SNI. Sudoers tidak memberi shell atau perintah bebas; helper juga menolak semua argumen command line.
 - Admin panel berwenang mengelola proxy dan meminta pembaruan Xray. Gunakan kata sandi unik sepanjang 8–72 byte dan batasi akses jaringan ke port panel. Jangan paparkan panel HTTP ke Internet tanpa HTTPS.
 - State panel (`/var/lib/xray-panel/state.json`), config Xray aktif, dan backup config diberi mode `0600`; direktori data panel `0700`. Config aktif ber-owner `root:root`; drop-in systemd memakai `LoadCredential` untuk menyerahkan salinan read-only hanya kepada service Xray non-root saat start, sehingga user `xray` tidak dapat membaca file sumber secara langsung. Ini memerlukan systemd 249 atau lebih baru (Ubuntu 22.04+).
-- Kunci privat REALITY disimpan dalam data dan konfigurasi, tidak dikirim melalui API biasa, tautan, QR, atau log UI. Cadangan yang diunduh memang berisi kunci privat dan harus diperlakukan sebagai rahasia.
-- Tidak ada analytics, telemetry, CDN, atau API eksternal di runtime panel. Akses jaringan installer mencakup repo GitHub, GitHub untuk Xray, dan mirror Ubuntu untuk paket OS; updater Xray memakai skrip resmi pada revisi immutable yang diverifikasi SHA-256 sebelum dijalankan sebagai root. Xray sendiri tentu membuat koneksi keluar untuk meneruskan trafik TCP klien proxy.
+- Kunci privat REALITY dan seed ML-DSA-65 disimpan dalam data dan konfigurasi, tidak dikirim melalui API biasa, tautan, QR, atau log UI. Verifier ML-DSA-65 bersifat publik dan digunakan di parameter `pqv` tautan klien. Cadangan yang diunduh memang berisi material privat dan harus diperlakukan sebagai rahasia.
+- Tidak ada analytics, telemetry, CDN, atau API eksternal di runtime panel. Saat admin secara eksplisit memulai aktivasi ML-DSA-65, helper menyelesaikan DNS target dan membuka koneksi TLS untuk mengukur syarat REALITY. Akses jaringan installer mencakup repo GitHub, GitHub untuk Xray, dan mirror Ubuntu untuk paket OS; updater Xray memakai skrip resmi pada revisi immutable yang diverifikasi SHA-256 sebelum dijalankan sebagai root. Xray sendiri tentu membuat koneksi keluar untuk meneruskan trafik TCP klien proxy.
 - Kuota/kedaluwarsa dan statistik trafik per-user belum disertakan. Xray Stats API tidak diaktifkan agar jejak pemakaian dan kompleksitas tetap minimal.
 
 ## Checklist pengujian manual
@@ -132,6 +138,7 @@ Lakukan lebih dulu pada VPS uji atau dengan backup yang dapat dipulihkan.
 10. **Backup/restore:** unduh backup, simpan secara aman, ubah user/settings, restore backup dan pastikan config aktif dipulihkan. Pastikan restore tidak mengganti password admin yang sedang dipakai.
 11. **Password/TLS:** ubah password admin, pastikan sesi lama harus login ulang; bila TLS diaktifkan, buka `https://HOST:PORT` dan verifikasi bahwa browser menunjukkan TLS (sertifikat self-signed akan tetap diberi warning).
 12. **Update/uninstall:** pada staging, uji update dan pastikan pengguna tetap ada. Uninstall biasa harus mempertahankan Xray serta state/backup panel; purge total hanya lewat `uninstall --purge-xray` dan harus menjelaskan bahwa Xray, konfigurasi, key, pengguna, state, backup, serta aturan firewall bertanda aplikasi akan dihapus.
+13. **ML-DSA-65 opsional:** pada staging saja, pastikan profil lama tidak berubah secara default; uji bahwa target ditolak bila rantai sertifikat tidak lebih dari 3500 byte, SNI tidak cocok, atau X25519MLKEM768 tidak dinegosiasikan. Setelah target memenuhi syarat, aktifkan hanya pada profil uji, ambil tautan baru, dan verifikasi import serta handshake dengan aplikasi klien nyata sebelum mempertimbangkan pemakaian lain. Backup berisi seed privat.
 
 ## Troubleshooting
 

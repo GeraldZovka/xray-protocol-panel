@@ -68,6 +68,8 @@ type ManagedInbound struct {
 	RealityPrivateKey string   `json:"realityPrivateKey,omitempty"`
 	RealityPublicKey  string   `json:"realityPublicKey,omitempty"`
 	RealityShortID    string   `json:"realityShortId,omitempty"`
+	MLDSA65Seed       string   `json:"mldsa65Seed,omitempty"`
+	MLDSA65Verify     string   `json:"mldsa65Verify,omitempty"`
 }
 
 func (in *ManagedInbound) UnmarshalJSON(data []byte) error {
@@ -92,6 +94,8 @@ type appState struct {
 	RealityPrivateKey string           `json:"realityPrivateKey"`
 	RealityPublicKey  string           `json:"realityPublicKey"`
 	RealityShortID    string           `json:"realityShortId"`
+	MLDSA65Seed       string           `json:"mldsa65Seed,omitempty"`
+	MLDSA65Verify     string           `json:"mldsa65Verify,omitempty"`
 }
 
 var hostnameRE = regexp.MustCompile(`^[A-Za-z0-9.-]{1,253}$`)
@@ -294,6 +298,14 @@ func validateManagedInbounds(st appState) error {
 		seenIDs[in.ID] = true
 		if !contains(managedInboundProtocols, in.Protocol) {
 			return fmt.Errorf("protokol tambahan %q belum didukung untuk pembuatan credential/link", in.Protocol)
+		}
+		if in.MLDSA65Seed != "" || in.MLDSA65Verify != "" {
+			if in.Protocol != "vless" {
+				return errors.New("ML-DSA-65 hanya didukung pada inbound VLESS + REALITY")
+			}
+			if err := validateMLDSA65Pair(in.MLDSA65Seed, in.MLDSA65Verify); err != nil {
+				return fmt.Errorf("pasangan kunci ML-DSA-65 inbound %s tidak valid: %w", in.ID, err)
+			}
 		}
 		if in.Name != "" {
 			if err := validateUserName(in.Name); err != nil {
@@ -582,6 +594,9 @@ func buildPrimaryInbound(s appState) (map[string]any, error) {
 			"shortIds":    []string{s.RealityShortID},
 		},
 	}
+	if s.MLDSA65Seed != "" {
+		stream["realitySettings"].(map[string]any)["mldsa65Seed"] = s.MLDSA65Seed
+	}
 	if s.Settings.Mode == "xhttp" {
 		stream["xhttpSettings"] = map[string]any{"path": s.Settings.XHTTPPath}
 	}
@@ -613,7 +628,11 @@ func buildManagedInbound(in ManagedInbound, users []User) (map[string]any, error
 		if mode == "" {
 			mode = "xhttp"
 		}
-		stream := map[string]any{"network": mode, "security": "reality", "realitySettings": map[string]any{"show": false, "target": in.Dest, "serverNames": []string{in.SNI}, "privateKey": in.RealityPrivateKey, "shortIds": []string{in.RealityShortID}}}
+		realitySettings := map[string]any{"show": false, "target": in.Dest, "serverNames": []string{in.SNI}, "privateKey": in.RealityPrivateKey, "shortIds": []string{in.RealityShortID}}
+		if in.MLDSA65Seed != "" {
+			realitySettings["mldsa65Seed"] = in.MLDSA65Seed
+		}
+		stream := map[string]any{"network": mode, "security": "reality", "realitySettings": realitySettings}
 		if mode == "xhttp" {
 			stream["xhttpSettings"] = map[string]any{"path": in.XHTTPPath}
 		}
@@ -729,6 +748,9 @@ func makeManagedLink(in ManagedInbound, user User, host string, port int) (strin
 			mode = "xhttp"
 		}
 		params := url.Values{"encryption": {"none"}, "security": {"reality"}, "sni": {in.SNI}, "fp": {"chrome"}, "pbk": {in.RealityPublicKey}, "sid": {in.RealityShortID}, "type": {mode}}
+		if in.MLDSA65Verify != "" {
+			params.Set("pqv", in.MLDSA65Verify)
+		}
 		if mode == "tcp" {
 			params.Set("flow", "xtls-rprx-vision")
 		} else {
@@ -760,6 +782,9 @@ func makeVLESSLinkForEndpoint(s appState, u User, host string, port int) string 
 	params.Set("fp", "chrome")
 	params.Set("pbk", s.RealityPublicKey)
 	params.Set("sid", s.RealityShortID)
+	if s.MLDSA65Verify != "" {
+		params.Set("pqv", s.MLDSA65Verify)
+	}
 	if s.Settings.Mode == "tcp" {
 		params.Set("type", "tcp")
 		params.Set("flow", "xtls-rprx-vision")
