@@ -49,9 +49,16 @@ assert.match(compactStyle, /#app\.wrap\{width:min\(980px,100%\);margin:0 auto;pa
 assert.match(compactStyle, /#app \.top-subtitle\{display:none\}/, 'decorative header subtitle is removed to simplify the header');
 assert.match(compactStyle, /#app \.tabs\{position:sticky;/, 'compact navigation stays reachable while scrolling');
 assert.match(compactStyle, /@media\(max-width:480px\)[\s\S]*?#app \.profile-actions\{display:grid;/, 'profile actions use a compact phone layout');
+assert.match(compactStyle, /#app \.profile-actions\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\);gap:5px\}/, 'all four inbound actions stay in one compact row on mobile');
+assert.match(compactStyle, /#app \.profile-actions button\{flex:initial;min-width:0;min-height:40px;height:40px;padding:4px 3px;font-size:10\.5px;line-height:1\.1;white-space:nowrap;overflow:hidden\}/, 'mobile action buttons are short, single-line, and remain tappable');
 assert.match(compactStyle, /body\[data-background="custom"\] #app \.top,body\[data-background="custom"\] #app \.file-picker\{background-color:var\(--glass\)[^}]*backdrop-filter:blur\(16px\) saturate\(145%\)/, 'custom backgrounds keep liquid-glass header and picker surfaces');
 assert.match(compactStyle, /#app \.custom-preview\{height:88px/, 'custom background preview is compact');
 assert.match(script, /action:'mldsa65'/, 'per-inbound ML-DSA control remains available');
+assert.match(script, /element\('button','secondary',tr\('Muat ulang'\)\)/, 'reload button keeps its concise bilingual label');
+assert.match(script, /element\('button','secondary',tr\('ML-DSA'\)\)/, 'ML-DSA button uses a short visible label');
+assert.match(script, /pqToggle\.title=pqActionLabel;pqToggle\.setAttribute\('aria-label',pqActionLabel\)/, 'ML-DSA button exposes a bilingual action title and accessible name');
+assert.ok(script.includes('"Muat ulang":"Refresh"'), 'reload label translates into English');
+assert.ok(script.includes('"Aktifkan ML-DSA-65":"Enable ML-DSA-65"') && script.includes('"Matikan ML-DSA-65":"Disable ML-DSA-65"'), 'ML-DSA action name translates into English');
 
 const validatorLine = script.match(/^async function validateBackgroundFile\(file\)\{[^\n]*\}$/m)?.[0];
 assert.ok(validatorLine, 'image validator is present');
