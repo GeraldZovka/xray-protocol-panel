@@ -8,8 +8,12 @@ STATE_FILE=$STATE_DIR/state.json
 PANEL_USER=xray-panel
 PANEL_UNIT=xray-panel.service
 XRAY_CONFIG=/usr/local/etc/xray/config.json
-XRAY_INSTALL_URL=https://github.com/XTLS/Xray-install/raw/main/install-release.sh
+XRAY_INSTALL_REV=1bce9c3a9630d72521643159080017d1c001bc71
+XRAY_INSTALL_SHA256=a562d1287cd7bf2871023d4c81bd9031c56fa132956067ba1de126957cc5fb1c
+XRAY_INSTALL_URL=https://raw.githubusercontent.com/XTLS/Xray-install/$XRAY_INSTALL_REV/install-release.sh
 REPO_URL=${XRAY_PANEL_REPO:-https://github.com/GeraldZovka/xray-protocol-panel.git}
+PANEL_BIND_ADDR=${XRAY_PANEL_BIND_ADDR:-127.0.0.1}
+PANEL_ALLOW_FROM=${XRAY_PANEL_ALLOW_FROM:-}
 GENERATED_PASSWORD=
 
 say(){ printf '\n==> %s\n' "$*"; }
@@ -31,7 +35,7 @@ install_deps(){
   say 'Memasang dependensi ringan dan tool build.'
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y ca-certificates curl git golang-go iproute2 openssl sudo ufw
+  apt-get install -y --no-upgrade ca-certificates curl git golang-go iproute2 openssl sudo ufw
 }
 check_repo_url(){
   if [[ $REPO_URL == *'USER/REPO'* ]]; then
@@ -42,6 +46,36 @@ check_repo_url(){
   fi
   [[ $REPO_URL != *'USER/REPO'* ]] || die 'Atur XRAY_PANEL_REPO ke URL repo GitHub Anda, atau ganti USER/REPO di nilai default install.sh.'
   [[ $REPO_URL =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(\.git)?/?$ ]] || die 'XRAY_PANEL_REPO harus URL clone HTTPS GitHub berbentuk https://github.com/owner/repo.git.'
+}
+verify_xray_installer(){
+  local path=$1 expected=${2:-$XRAY_INSTALL_SHA256} actual
+  [[ -f $path && ! -L $path && $expected =~ ^[[:xdigit:]]{64}$ ]] || return 1
+  actual=$(sha256sum -- "$path" | awk '{print $1}') || return 1
+  [[ $actual == "$expected" ]]
+}
+download_xray_installer(){
+  local path=$1
+  if ! curl -fsSL --proto '=https' --tlsv1.2 "$XRAY_INSTALL_URL" -o "$path"; then
+    rm -f -- "$path"
+    return 1
+  fi
+  if ! verify_xray_installer "$path"; then
+    rm -f -- "$path"
+    return 1
+  fi
+  chmod 0700 "$path"
+}
+validate_panel_binding(){
+  case $PANEL_BIND_ADDR in
+    127.0.0.1|0.0.0.0) ;;
+    *) die 'XRAY_PANEL_BIND_ADDR hanya boleh 127.0.0.1 (loopback) atau 0.0.0.0 (semua interface).' ;;
+  esac
+  if [[ -n $PANEL_ALLOW_FROM && $PANEL_BIND_ADDR != 0.0.0.0 ]]; then
+    die 'XRAY_PANEL_ALLOW_FROM hanya berlaku bila XRAY_PANEL_BIND_ADDR=0.0.0.0.'
+  fi
+  if [[ -n $PANEL_ALLOW_FROM ]] && ! python3 -c 'import ipaddress,sys; ipaddress.ip_network(sys.argv[1], strict=False)' "$PANEL_ALLOW_FROM" >/dev/null 2>&1; then
+    die 'XRAY_PANEL_ALLOW_FROM harus alamat IPv4/IPv6 atau CIDR yang valid.'
+  fi
 }
 fetch_repo(){
   check_repo_url
@@ -59,8 +93,8 @@ fetch_repo(){
 build_app(){
   say 'Build panel dan helper dengan konkurensi rendah.'
   command -v go >/dev/null || die 'Go compiler tidak tersedia setelah instalasi dependensi.'
-  (cd "$APP_DIR" && GOMAXPROCS=1 GOFLAGS='-mod=vendor -p=1' go build -trimpath -ldflags='-s -w' -o /usr/local/bin/xray-panel .)
-  (cd "$APP_DIR" && GOMAXPROCS=1 GOFLAGS='-mod=vendor -p=1' go build -trimpath -ldflags='-s -w' -o /usr/local/sbin/xray-panel-helper ./cmd/helper)
+  (cd "$APP_DIR" && GOMAXPROCS=1 CGO_ENABLED=0 GOFLAGS='-mod=vendor -p=1' go build -trimpath -ldflags='-s -w' -o /usr/local/bin/xray-panel .)
+  (cd "$APP_DIR" && GOMAXPROCS=1 CGO_ENABLED=0 GOFLAGS='-mod=vendor -p=1' go build -trimpath -ldflags='-s -w' -o /usr/local/sbin/xray-panel-helper ./cmd/helper)
   chown root:root /usr/local/bin/xray-panel /usr/local/sbin/xray-panel-helper
   chmod 0755 /usr/local/bin/xray-panel /usr/local/sbin/xray-panel-helper
 }
@@ -75,8 +109,7 @@ ensure_xray(){
   local installer
   installer=$(mktemp /tmp/xray-install-XXXXXX.sh)
   trap 'rm -f "${installer:-}"' RETURN
-  curl -fsSL "$XRAY_INSTALL_URL" -o "$installer"
-  chmod 0700 "$installer"
+  download_xray_installer "$installer" || die 'Installer XTLS tidak cocok dengan revisi/hash tepercaya; skrip tidak dijalankan.'
   say 'Memasang/memperbarui Xray melalui installer resmi XTLS.'
   bash "$installer" install --without-geodata --manually-restart-later
   rm -f "$installer"
@@ -137,11 +170,12 @@ ask_install_ports(){
   check_new_ports "$PANEL_INTERNAL" "$XRAY_INTERNAL"
 }
 ask_password(){
-  local p1 p2
+  local p1 p2 password_bytes
   read -r -s -p 'Password admin (kosong = buat acak): ' p1 || true; printf '\n'
   if [[ -z $p1 ]]; then GENERATED_PASSWORD=$(openssl rand -hex 24); p1=$GENERATED_PASSWORD
   else
-    (( ${#p1} >= 8 && ${#p1} <= 1024 )) || die 'Password admin harus 8–1024 karakter.'
+    password_bytes=$(printf '%s' "$p1" | wc -c)
+    (( password_bytes >= 8 && password_bytes <= 72 )) || die 'Password admin harus 8–72 byte (batas bcrypt).'
     read -r -s -p 'Ulangi password admin: ' p2 || true; printf '\n'
     [[ $p1 == "$p2" ]] || die 'Password tidak sama.'
   fi
@@ -181,7 +215,7 @@ write_service_config(){
   install -d -o root -g "$PANEL_USER" -m 0750 /etc/xray-panel
   {
     printf 'XRAY_PANEL_STATE=%s\n' "$STATE_FILE"
-    printf 'PANEL_ADDR=0.0.0.0:%s\n' "$PANEL_INTERNAL"
+    printf 'PANEL_ADDR=%s:%s\n' "$PANEL_BIND_ADDR" "$PANEL_INTERNAL"
     if [[ -n ${TLS_CERT:-} ]]; then printf 'PANEL_TLS_CERT=%s\nPANEL_TLS_KEY=%s\n' "$TLS_CERT" "$TLS_KEY"; fi
   } > /etc/xray-panel.env
   chown root:"$PANEL_USER" /etc/xray-panel.env
@@ -206,13 +240,22 @@ start_services(){
 }
 open_firewall(){
   if ufw status 2>/dev/null | grep -q '^Status: active'; then
-    say 'UFW aktif: mengizinkan TCP pada port internal panel dan Xray.'
-    ufw allow "$PANEL_INTERNAL/tcp" comment 'xray-panel internal panel' >/dev/null || true
+    if [[ $PANEL_BIND_ADDR == 0.0.0.0 ]]; then
+      if [[ -n $PANEL_ALLOW_FROM ]]; then
+        say "UFW aktif: mengizinkan panel hanya dari $PANEL_ALLOW_FROM."
+        ufw allow from "$PANEL_ALLOW_FROM" to any port "$PANEL_INTERNAL" proto tcp comment 'xray-panel internal panel' >/dev/null
+      else
+        say 'Panel bind publik, tetapi tidak dibuatkan izin UFW untuk panel; batasi port lewat firewall jaringan eksternal atau set XRAY_PANEL_ALLOW_FROM.'
+      fi
+    else
+      say 'Panel hanya bind ke loopback; tidak ada izin UFW panel.'
+    fi
+    say 'UFW aktif: mengizinkan TCP pada port internal Xray.'
     ufw allow "$XRAY_INTERNAL/tcp" comment 'xray-panel internal xray' >/dev/null || true
   fi
 }
 install_fresh(){
-  require_root;check_platform;check_repo_url;install_deps;fetch_repo
+  require_root;check_platform;check_repo_url;validate_panel_binding;install_deps;fetch_repo
   if [[ -f $STATE_FILE || -L $STATE_FILE ]]; then
     [[ -f $STATE_FILE && ! -L $STATE_FILE ]] || die 'State panel bukan file reguler yang aman; periksa /var/lib/xray-panel/state.json.'
     say 'State sudah ada; memakai jalur update untuk mempertahankannya.'
@@ -246,12 +289,13 @@ install_fresh(){
   [[ -z $TLS_CERT ]] || scheme=https
   say 'Instalasi selesai.'
   printf 'Panel: %s://<HOST>:<PORT>\n' "$scheme"
-  printf 'Port internal panel: %s/TCP.\n' "$PANEL_INTERNAL"
+  printf 'Bind panel: %s:%s/TCP.\n' "$PANEL_BIND_ADDR" "$PANEL_INTERNAL"
   printf 'Port internal Xray: %s/TCP; jika menggunakan endpoint publik, masukkan host:port di kartu profil terkait pada Dashboard.\n' "$XRAY_INTERNAL"
 
   printf 'Mode awal: VLESS + TCP + REALITY + Vision. UDP DNS port 53 langsung; UDP lainnya diblokir.\n'
-  printf 'Port UFW internal yang diizinkan: %s/TCP dan %s/TCP (jika UFW aktif).\n' "$PANEL_INTERNAL" "$XRAY_INTERNAL"
+  printf 'UFW hanya mengizinkan port Xray %s/TCP; izin panel dibatasi ke XRAY_PANEL_ALLOW_FROM bila bind publik.\n' "$XRAY_INTERNAL"
 
+  if [[ $PANEL_BIND_ADDR == 127.0.0.1 ]]; then printf 'Panel hanya tersedia di localhost; gunakan reverse proxy atau tunnel untuk akses jarak jauh.\n'; fi
   if [[ -z $TLS_CERT ]]; then printf 'PERINGATAN: panel masih HTTP. Gunakan reverse proxy HTTPS atau sertifikat yang cocok dengan hostname yang digunakan untuk panel.\n'; fi
 }
 update_existing(){
@@ -264,67 +308,97 @@ update_existing(){
   say 'Update selesai; state, pengguna, key, password, port dan pengaturan panel dipertahankan.'
 }
 remove_panel_ufw_rules(){
+  local scope=${1:-all}
   command -v ufw >/dev/null 2>&1 || return 0
   local number
   while :; do
-    number=$(ufw status numbered 2>/dev/null | grep -E '# xray-panel internal (panel|xray)( |$)' | sed -nE 's/^[[:space:]]*\[[[:space:]]*([0-9]+)\].*/\1/p' | head -n 1)
+    if [[ $scope == panel ]]; then
+      number=$(ufw status numbered 2>/dev/null | grep -F '# xray-panel internal panel' | sed -nE 's/^[[:space:]]*\[[[:space:]]*([0-9]+)\].*/\1/p' | head -n 1 || true)
+    else
+      number=$(ufw status numbered 2>/dev/null | grep -E '# xray-panel internal (panel|xray)( |$)' | sed -nE 's/^[[:space:]]*\[[[:space:]]*([0-9]+)\].*/\1/p' | head -n 1 || true)
+    fi
     [[ -n $number ]] || break
     ufw --force delete "$number" >/dev/null || break
   done
 }
 uninstall_panel(){
+  local purge_xray=${1:-0}
   require_root;check_platform
   [[ -d /etc/systemd/system ]] || die 'systemd tidak tersedia.'
-  printf 'PURGE TOTAL: panel, Xray, konfigurasi, key/user, sertifikat TLS, state/backup lokal, akun service, clone source, dan aturan UFW bertanda xray-panel akan DIHAPUS PERMANEN. Paket OS umum dan riwayat jurnal systemd bersama tetap ada.\n'
-  read -r -p 'Lanjutkan? ketik hapus-total: ' confirm || true
-  [[ $confirm == hapus-total ]] || die 'Dibatalkan; tidak ada perubahan.'
+  if [[ $purge_xray == 1 ]]; then
+    printf 'PURGE TOTAL: panel, Xray, konfigurasi aktif, key/user, state/backup lokal, sertifikat panel, akun service, clone source, dan aturan UFW bertanda xray-panel akan dihapus. Uninstaller XTLS juga menghapus unit/drop-in Xray.\n'
+    read -r -p 'Lanjutkan? ketik hapus-total: ' confirm || true
+    [[ $confirm == hapus-total ]] || die 'Dibatalkan; tidak ada perubahan.'
+  else
+    printf 'HAPUS PANEL SAJA: menghentikan panel dan menghapus aplikasinya. Xray, konfigurasi, pengguna, firewall Xray, dan state/backup panel di /var/lib/xray-panel dipertahankan.\n'
+    read -r -p 'Lanjutkan? ketik hapus-panel: ' confirm || true
+    [[ $confirm == hapus-panel ]] || die 'Dibatalkan; tidak ada perubahan.'
+  fi
 
-  local has_xray_unit=0 remover=
-  if systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '$1 == "xray.service" || $1 == "xray@.service" { found=1 } END { exit !found }'; then has_xray_unit=1; fi
-  if (( has_xray_unit )); then
+  local remover=
+  if [[ $purge_xray == 1 ]] && systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '$1 == "xray.service" || $1 == "xray@.service" { found=1 } END { exit !found }'; then
     remover=$(mktemp /tmp/xray-remove-XXXXXX.sh)
-    if ! curl -fsSL "$XRAY_INSTALL_URL" -o "$remover"; then
+    if ! download_xray_installer "$remover"; then
       rm -f "$remover"
-      die 'Tidak dapat mengambil uninstaller resmi XTLS; tidak ada komponen yang dihapus.'
+      die 'Installer/uninstaller XTLS tidak cocok dengan revisi/hash tepercaya; tidak ada komponen yang dihapus.'
     fi
     if ! bash "$remover" remove --purge; then
       rm -f "$remover"
       die 'Uninstaller resmi XTLS gagal. Komponen panel belum dibersihkan; periksa status Xray sebelum mencoba lagi.'
     fi
     rm -f "$remover"
-  else
+  elif [[ $purge_xray == 1 ]]; then
     systemctl disable --now xray.service >/dev/null 2>&1 || true
     rm -f /usr/local/bin/xray /etc/systemd/system/xray.service /etc/systemd/system/xray@.service /etc/logrotate.d/xray
-    rm -rf /usr/local/share/xray /var/log/xray /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d
+    rm -rf /usr/local/share/xray /var/log/xray
   fi
 
   systemctl disable --now "$PANEL_UNIT" >/dev/null 2>&1 || true
   rm -f "/etc/systemd/system/$PANEL_UNIT" /etc/sudoers.d/xray-panel /usr/local/bin/xray-panel /usr/local/sbin/xray-panel-helper
-  rm -f /etc/xray-panel.env /etc/systemd/system/xray.service.d/90-xray-panel-credentials.conf "$XRAY_CONFIG"
-  rmdir /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d 2>/dev/null || true
-  rm -rf /etc/xray-panel "$STATE_DIR" "$APP_DIR"
-  find /var/backups -maxdepth 1 -mindepth 1 -type d -name 'xray-panel-uninstalled-*' -exec rm -rf -- {} + 2>/dev/null || true
-  shopt -s nullglob
-  local config_backups=(/usr/local/etc/xray/config.json.pre-xray-panel.*)
-  ((${#config_backups[@]} == 0)) || rm -f -- "${config_backups[@]}"
-  shopt -u nullglob
-  rmdir /usr/local/etc/xray 2>/dev/null || true
-  remove_panel_ufw_rules
-  if id "$PANEL_USER" >/dev/null 2>&1; then userdel --remove "$PANEL_USER" >/dev/null 2>&1 || true; fi
-  if getent group "$PANEL_USER" >/dev/null 2>&1; then groupdel "$PANEL_USER" >/dev/null 2>&1 || true; fi
+  rm -rf "$APP_DIR"
+  if [[ $purge_xray == 1 ]]; then
+    rm -f /etc/xray-panel.env
+    rm -rf /etc/xray-panel
+    rm -f /etc/systemd/system/xray.service.d/90-xray-panel-credentials.conf "$XRAY_CONFIG"
+    rmdir /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d 2>/dev/null || true
+    rm -rf "$STATE_DIR"
+    find /var/backups -maxdepth 1 -mindepth 1 -type d -name 'xray-panel-uninstalled-*' -exec rm -rf -- {} + 2>/dev/null || true
+    shopt -s nullglob
+    local config_backups=(/usr/local/etc/xray/config.json.pre-xray-panel.*)
+    ((${#config_backups[@]} == 0)) || rm -f -- "${config_backups[@]}"
+    shopt -u nullglob
+    rmdir /usr/local/etc/xray 2>/dev/null || true
+    remove_panel_ufw_rules all
+    if id "$PANEL_USER" >/dev/null 2>&1; then userdel --remove "$PANEL_USER" >/dev/null 2>&1 || true; fi
+  else
+    remove_panel_ufw_rules panel
+    printf 'Konfigurasi panel/TLS di /etc/xray-panel.env dan /etc/xray-panel, data, serta akun service %s dipertahankan untuk reinstall.\n' "$PANEL_USER"
+  fi
+  if [[ $purge_xray == 1 ]] && getent group "$PANEL_USER" >/dev/null 2>&1; then groupdel "$PANEL_USER" >/dev/null 2>&1 || true; fi
   systemctl daemon-reload
-  systemctl reset-failed "$PANEL_UNIT" xray.service >/dev/null 2>&1 || true
-  say 'Uninstall total selesai: panel, Xray, data/config, dan aturan UFW milik panel telah dihapus.'
-  printf 'Paket OS umum (mis. curl, git, Go, sudo, dan UFW) tetap terpasang agar software lain di VPS tidak terganggu.\n'
+  systemctl reset-failed "$PANEL_UNIT" >/dev/null 2>&1 || true
+  if [[ $purge_xray == 1 ]]; then
+    say 'Purge total selesai: panel, Xray, data/config, dan aturan UFW milik panel telah dihapus.'
+  else
+    say 'Panel dihapus; Xray dan seluruh state/backup panel tetap tersimpan.'
+    printf 'State panel dipertahankan di %s; Xray/config dan aturan UFW Xray tidak disentuh.\n' "$STATE_DIR"
+  fi
+  printf 'Paket OS umum (mis. curl, git, Go, sudo, dan UFW) tetap terpasang.\n'
 }
 
 main(){
   require_root
   case ${1:-install} in
-    install) install_fresh ;;
-    update) update_existing ;;
-    uninstall) uninstall_panel ;;
-    *) printf 'Pemakaian: install.sh [install|update|uninstall]\n'; exit 2 ;;
+    install) [[ $# -le 1 ]] || die 'Pemakaian: install.sh [install]'; install_fresh ;;
+    update) [[ $# -le 1 ]] || die 'Pemakaian: install.sh update'; update_existing ;;
+    uninstall)
+      case ${2:-} in
+        '') uninstall_panel 0 ;;
+        --purge-xray) [[ $# -eq 2 ]] || die 'Pemakaian: install.sh uninstall [--purge-xray]'; uninstall_panel 1 ;;
+        *) die 'Pemakaian: install.sh uninstall [--purge-xray]' ;;
+      esac
+      ;;
+    *) printf 'Pemakaian: install.sh [install|update|uninstall [--purge-xray]]\n'; exit 2 ;;
   esac
 }
 

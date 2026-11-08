@@ -35,12 +35,14 @@ Ganti `GeraldZovka/xray-protocol-panel` pada URL raw dengan repo Anda; installer
 
 Pada instalasi baru, installer hanya meminta dua port internal secara manual: port internal panel dan port internal Xray. **Tidak ada nilai bawaan; input kosong atau tidak valid akan diminta ulang.** Kedua port internal harus berbeda. Installer tidak meminta hostname atau port publik. Jika Anda menggunakan endpoint publik, masukkan host:port pada kartu inbound di **Dashboard** setelah endpoint tersedia.
 
+Panel baru secara default hanya bind ke `127.0.0.1`, sehingga tidak membuka port admin ke Internet; gunakan reverse proxy HTTPS atau tunnel lokal untuk mengaksesnya. Untuk memilih bind publik secara sengaja, set `XRAY_PANEL_BIND_ADDR=0.0.0.0` sebelum menjalankan installer. Jika UFW aktif dan akses jarak jauh memang dibutuhkan, set `XRAY_PANEL_ALLOW_FROM=<IP-atau-CIDR-admin>`; installer tidak menambahkan izin UFW panel global. Bila UFW tidak aktif, batasi akses melalui firewall jaringan eksternal.
+
 Panel menyimpan endpoint publik per inbound dalam bentuk `host:port` untuk membuat tautan dan QR koneksi. Pastikan endpoint yang dimasukkan sesuai dengan cara jaringan Anda meneruskan koneksi ke port internal inbound. Panel tidak mengubah firewall atau pengaturan jaringan di luar aplikasi. Installer mengecek kedua port internal dan berhenti jika salah satunya sudah dipakai.
 Nilai awal non-port tetap: REALITY SNI/dest `www.cloudflare.com` / `www.cloudflare.com:443` dan koneksi VLESS + TCP + REALITY + Vision. Endpoint publik Xray diisi melalui panel jika diperlukan.
 
 Jika kata sandi admin dikosongkan, installer membuat kata sandi acak dan menampilkannya **sekali setelah data tersimpan**. Simpan di pengelola kata sandi. Menjalankan ulang installer tidak mereset kata sandi, kunci, pengguna, atau pengaturan yang tersimpan.
 
-Installer memasang dependensi sistem operasi dari repositori Ubuntu, meng-clone repositori, membangun biner Go dengan satu worker, memasang Xray dari [installer resmi XTLS](https://github.com/XTLS/Xray-install), menyimpan cadangan konfigurasi lama, dan memasang unit systemd. Modul sumber Go sudah berada di `vendor/`; proses build tidak perlu meminta dependensi ke proxy modul Go.
+Installer memasang dependensi yang belum tersedia dari repositori Ubuntu tanpa meng-upgrade paket yang sudah terpasang, meng-clone repositori, membangun biner Go dengan satu worker dan CGO dinonaktifkan, memasang Xray dari [installer resmi XTLS](https://github.com/XTLS/Xray-install) setelah memverifikasi revisi immutable dan SHA-256 yang dipin, menyimpan cadangan konfigurasi lama, dan memasang unit systemd. Modul sumber Go sudah berada di `vendor/`; proses build tidak perlu meminta dependensi ke proxy modul Go atau toolchain C.
 
 ## Endpoint publik, port, dan transport
 
@@ -62,13 +64,19 @@ XRAY_PANEL_REPO=https://github.com/GeraldZovka/xray-protocol-panel.git bash <(cu
 
 Tombol **Perbarui Xray** di panel hanya menjalankan updater Xray resmi. Pembaruan dapat memutus sesi proxy aktif sesaat. Jika SSH Anda sendiri melewati Xray, update/restart dapat memutus koneksi SSH.
 
-Uninstall **total** (meminta konfirmasi dengan mengetik `hapus-total`):
+Uninstall biasa menghapus aplikasi panel saja dan meminta konfirmasi dengan mengetik `hapus-panel`. Xray, konfigurasi Xray, pengguna, aturan firewall Xray, state/backup panel, konfigurasi environment/TLS panel, dan akun service non-login tetap disimpan agar pemasangan ulang dapat memakai data yang sama:
 
 ```bash
 XRAY_PANEL_REPO=https://github.com/GeraldZovka/xray-protocol-panel.git bash <(curl -fsSL https://raw.githubusercontent.com/GeraldZovka/xray-protocol-panel/main/install.sh) uninstall
 ```
 
-Perintah ini menghapus panel dan instalasi Xray melalui uninstaller resmi XTLS, termasuk konfigurasi aktif, kunci REALITY, pengguna, data panel, sertifikat TLS yang dikelola panel, akun layanan, salinan repositori di `/opt/xray-panel`, cadangan lokal yang dibuat panel, dan hanya aturan UFW yang memiliki komentar `xray-panel`. **Data dan cadangan tidak dipertahankan.** Jangan jalankan bila Anda ingin menyimpan data atau memakai instalasi Xray yang sudah ada untuk layanan lain. Paket OS umum seperti `curl`, Git, Go, `sudo`, UFW, dan riwayat journald bersama sengaja tetap ada agar layanan lain di VPS tidak terganggu. Uninstaller resmi XTLS perlu diunduh; bila jaringan gagal, pembersihan dihentikan sebelum data panel dihapus.
+Purge **panel dan Xray** adalah pilihan terpisah dan memerlukan konfirmasi `hapus-total`:
+
+```bash
+XRAY_PANEL_REPO=https://github.com/GeraldZovka/xray-protocol-panel.git bash <(curl -fsSL https://raw.githubusercontent.com/GeraldZovka/xray-protocol-panel/main/install.sh) uninstall --purge-xray
+```
+
+Purge total menghapus konfigurasi aktif, kunci REALITY, pengguna, state/backup panel, Xray, akun layanan, dan aturan UFW bertanda `xray-panel`. Uninstaller XTLS menghapus unit/drop-in Xray; gunakan hanya bila Anda memang ingin menghapus seluruh instalasi Xray dan konfigurasinya. Kedua mode uninstall mempertahankan paket OS umum agar layanan lain di VPS tidak terganggu. Skrip XTLS yang diunduh diverifikasi terhadap revisi dan SHA-256 yang dipatok; bila gagal cocok, eksekusi/pembersihan dibatalkan.
 
 ## Inbound dan tautan klien
 
@@ -79,7 +87,7 @@ Setiap pengguna memperoleh tautan dan QR yang sesuai dengan protokol/transport u
 ## Panel dan fitur
 
 - Buka panel melalui alamat host dan port yang Anda konfigurasi, misalnya `http://HOST:PORT`.
-- Masuk menggunakan kata sandi admin. Kata sandi disimpan dengan bcrypt; sesi memakai cookie `HttpOnly`, `SameSite=Strict`, token CSRF, pemeriksaan Origin, serta pembatasan lima percobaan gagal per 15 menit per IP.
+- Masuk menggunakan kata sandi admin 8–72 byte. Kata sandi disimpan dengan bcrypt; sesi memakai cookie `HttpOnly`, `SameSite=Strict`, token CSRF, pemeriksaan Origin, serta pembatasan lima percobaan gagal per 15 menit per IP.
 - Dashboard menunjukkan status, versi, dan waktu aktif Xray; penggunaan CPU, RAM, dan disk VPS; beban sistem; profil inbound; pengguna; serta log yang lebih mudah dibaca.
 - Setiap kartu inbound menampilkan status dan tombol Edit, Mulai, Muat ulang, Hentikan, serta Hapus. Tombol Tambah profil berada di bagian atas. Muat ulang menerapkan kembali konfigurasi terbaru pada daemon Xray bersama, sehingga koneksi klien pada semua profil aktif dapat terputus sesaat. Profil utama juga dapat dihapus. Semua listener boleh dihentikan atau dihapus: daemon Xray tetap berjalan tanpa inbound dan profil baru masih dapat ditambahkan. Setiap perubahan konfigurasi gabungan diuji sebelum diterapkan; listener lain tetap dipertahankan.
 - Pengguna dapat ditambah, dinonaktifkan, diaktifkan, atau dihapus langsung di Dashboard. Saat menambah pengguna, admin wajib memilih profil/protokol aktif yang akan diterima. Pengguna lama beserta kredensial dan tautannya dipertahankan; tautan/QR dibuat untuk profil yang dipilih hanya jika endpoint publiknya lengkap.
@@ -97,22 +105,22 @@ Aplikasi menerima `PANEL_TLS_CERT` dan `PANEL_TLS_KEY` melalui `/etc/xray-panel.
 sudo systemctl restart xray-panel
 ```
 
-Untuk reverse proxy HTTPS, bind panel ke loopback dengan mengubah `PANEL_ADDR=127.0.0.1:8080` pada `/etc/xray-panel.env` dan restart service. Bila reverse proxy berjalan lokal, panel mengenali `X-Forwarded-Proto: https` hanya dari koneksi loopback.
+Untuk reverse proxy HTTPS, bind panel ke loopback (default instalasi baru) dengan `PANEL_ADDR=127.0.0.1:8080` pada `/etc/xray-panel.env` dan restart service. Bila reverse proxy berjalan lokal, panel mengenali `X-Forwarded-Proto: https` hanya dari koneksi loopback. Jika bind publik dipilih saat instalasi, gunakan firewall jaringan eksternal; `XRAY_PANEL_ALLOW_FROM` hanya menambahkan aturan UFW dengan sumber tertentu ketika UFW aktif.
 
 ## Keamanan dan pilihan desain
 
 - Proses panel berjalan sebagai user Linux non-root `xray-panel`. Satu helper root yang root-owned hanya menerima aksi JSON tetap: apply config, status/log, start/stop/restart Xray, dan update resmi. Sudoers tidak memberi shell atau perintah bebas; helper juga menolak semua argumen command line.
-- Admin panel berwenang mengelola proxy dan meminta pembaruan Xray. Kata sandi minimal 8 byte; gunakan kata sandi unik yang lebih panjang dan batasi akses jaringan ke port panel. Jangan paparkan panel HTTP ke Internet tanpa HTTPS.
+- Admin panel berwenang mengelola proxy dan meminta pembaruan Xray. Gunakan kata sandi unik sepanjang 8–72 byte dan batasi akses jaringan ke port panel. Jangan paparkan panel HTTP ke Internet tanpa HTTPS.
 - State panel (`/var/lib/xray-panel/state.json`), config Xray aktif, dan backup config diberi mode `0600`; direktori data panel `0700`. Config aktif ber-owner `root:root`; drop-in systemd memakai `LoadCredential` untuk menyerahkan salinan read-only hanya kepada service Xray non-root saat start, sehingga user `xray` tidak dapat membaca file sumber secara langsung. Ini memerlukan systemd 249 atau lebih baru (Ubuntu 22.04+).
 - Kunci privat REALITY disimpan dalam data dan konfigurasi, tidak dikirim melalui API biasa, tautan, QR, atau log UI. Cadangan yang diunduh memang berisi kunci privat dan harus diperlakukan sebagai rahasia.
-- Tidak ada analytics, telemetry, CDN, atau API eksternal di runtime panel. Akses jaringan installer mencakup repo GitHub, GitHub untuk Xray, dan mirror Ubuntu untuk paket OS; permintaan update Xray dari helper mengunduh installer resmi GitHub. Xray sendiri tentu membuat koneksi keluar untuk meneruskan trafik TCP klien proxy.
+- Tidak ada analytics, telemetry, CDN, atau API eksternal di runtime panel. Akses jaringan installer mencakup repo GitHub, GitHub untuk Xray, dan mirror Ubuntu untuk paket OS; updater Xray memakai skrip resmi pada revisi immutable yang diverifikasi SHA-256 sebelum dijalankan sebagai root. Xray sendiri tentu membuat koneksi keluar untuk meneruskan trafik TCP klien proxy.
 - Kuota/kedaluwarsa dan statistik trafik per-user belum disertakan. Xray Stats API tidak diaktifkan agar jejak pemakaian dan kompleksitas tetap minimal.
 
 ## Checklist pengujian manual
 
 Lakukan lebih dulu pada VPS uji atau dengan backup yang dapat dipulihkan.
 
-1. **Prompt port:** jalankan tes non-destruktif `bash tests/install_prompts_test.sh`. Tes memastikan installer hanya meminta dua port internal, input kosong/invalid diminta ulang, kedua port internal harus berbeda, serta tidak meminta endpoint atau port eksternal.
+1. **Prompt dan keamanan installer:** jalankan tes non-destruktif `bash tests/install_prompts_test.sh` dan `bash tests/install_security_test.sh`. Tes kedua memeriksa integritas installer, bind localhost default, aturan UFW tanpa akses global panel, uninstall opt-in, dan bahwa apt tidak meng-upgrade paket OS yang sudah terpasang.
 2. **Konflik port:** sebelum instal, pilih port internal yang sudah listen (misalnya `22` jika SSH menggunakannya), masukkan sebagai port internal panel, lalu jalankan installer. Pastikan installer menampilkan proses/port yang bentrok dan berhenti sebelum mengganti config.
 3. **Instalasi baru:** pastikan installer selesai, `systemctl status xray xray-panel`, dan `ss -ltnp` menampilkan port internal VLESS utama. Inbound tambahan dibuat di Dashboard setelah install.
 4. **Jaringan dan firewall:** pastikan endpoint publik mengarah ke layanan dan port internal yang tepat, lalu uji konektivitas TCP. Akses panel melalui URL yang berlaku; uji juga dari jaringan berbeda jika memungkinkan.
@@ -123,7 +131,7 @@ Lakukan lebih dulu pada VPS uji atau dengan backup yang dapat dipulihkan.
 9. **Banyak profil:** pada VPS staging, uji Start/Stop per inbound, hapus semua profil satu per satu melalui konfirmasi, pastikan daemon Xray tetap aktif dengan daftar inbound kosong, lalu tambahkan profil baru dan pastikan layanan dapat digunakan lagi. Pengaturan jaringan di luar panel tidak diubah oleh aplikasi.
 10. **Backup/restore:** unduh backup, simpan secara aman, ubah user/settings, restore backup dan pastikan config aktif dipulihkan. Pastikan restore tidak mengganti password admin yang sedang dipakai.
 11. **Password/TLS:** ubah password admin, pastikan sesi lama harus login ulang; bila TLS diaktifkan, buka `https://HOST:PORT` dan verifikasi bahwa browser menunjukkan TLS (sertifikat self-signed akan tetap diberi warning).
-12. **Update/uninstall:** pada staging, uji update dan pastikan pengguna tetap ada. Untuk uninstall total, pastikan konfirmasi `hapus-total` menjelaskan bahwa Xray, konfigurasi, key, pengguna, sertifikat, backup, dan aturan firewall bertanda aplikasi akan dihapus.
+12. **Update/uninstall:** pada staging, uji update dan pastikan pengguna tetap ada. Uninstall biasa harus mempertahankan Xray serta state/backup panel; purge total hanya lewat `uninstall --purge-xray` dan harus menjelaskan bahwa Xray, konfigurasi, key, pengguna, state, backup, serta aturan firewall bertanda aplikasi akan dihapus.
 
 ## Troubleshooting
 

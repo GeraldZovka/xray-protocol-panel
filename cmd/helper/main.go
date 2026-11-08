@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +20,9 @@ import (
 
 const configPath = "/usr/local/etc/xray/config.json"
 const xrayPath = "/usr/local/bin/xray"
+const xrayInstallRevision = "1bce9c3a9630d72521643159080017d1c001bc71"
+const xrayInstallSHA256 = "a562d1287cd7bf2871023d4c81bd9031c56fa132956067ba1de126957cc5fb1c"
+const xrayInstallURL = "https://raw.githubusercontent.com/XTLS/Xray-install/" + xrayInstallRevision + "/install-release.sh"
 
 type request struct {
 	Action    string `json:"action"`
@@ -376,8 +381,14 @@ func update() response {
 	name := f.Name()
 	_ = f.Close()
 	defer os.Remove(name)
-	if _, err := run("/usr/bin/curl", "-fsSL", "https://github.com/XTLS/Xray-install/raw/main/install-release.sh", "-o", name); err != nil {
+	if _, err := run("/usr/bin/curl", "-fsSL", "--proto", "=https", "--tlsv1.2", xrayInstallURL, "-o", name); err != nil {
 		return response{Error: "gagal mengambil installer resmi Xray: " + err.Error()}
+	}
+	if err := verifySHA256File(name, xrayInstallSHA256); err != nil {
+		return response{Error: "installer Xray tidak lolos verifikasi integritas; skrip tidak dijalankan"}
+	}
+	if err := os.Chmod(name, 0700); err != nil {
+		return response{Error: "gagal mengatur izin installer Xray terverifikasi"}
 	}
 	if _, err := run("/bin/bash", name, "install", "--manually-restart-later"); err != nil {
 		return response{Error: "installer Xray gagal: " + err.Error()}
@@ -392,6 +403,21 @@ func update() response {
 		return response{Error: "Xray diperbarui tetapi restart gagal: " + err.Error()}
 	}
 	return response{OK: true}
+}
+func verifySHA256File(path, expected string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	if hex.EncodeToString(h.Sum(nil)) != expected {
+		return fmt.Errorf("SHA-256 mismatch")
+	}
+	return nil
 }
 func installXrayCredentialOverride() error {
 	dir := "/etc/systemd/system/xray.service.d"

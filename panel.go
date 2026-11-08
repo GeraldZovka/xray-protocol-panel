@@ -39,7 +39,7 @@ const (
 	maxBodyBytes          = 8 << 20
 	maxBackgroundBytes    = 5 << 20
 	minAdminPasswordBytes = 8
-	maxAdminPasswordBytes = 1024
+	maxAdminPasswordBytes = 72
 )
 
 func validAdminPasswordLength(password []byte) bool {
@@ -231,7 +231,7 @@ func initialize(args []string) error {
 	pw = bytes.TrimSuffix(pw, []byte("\n"))
 	pw = bytes.TrimSuffix(pw, []byte("\r"))
 	if !validAdminPasswordLength(pw) {
-		return errors.New("password admin harus 8–1024 byte")
+		return errors.New("password admin harus 8–72 byte")
 	}
 	hash, err := bcrypt.GenerateFromPassword(pw, 12)
 	for i := range pw {
@@ -1240,7 +1240,7 @@ func (s *server) changePassword(raw map[string]json.RawMessage) error {
 		return errors.New("isian password tidak valid")
 	}
 	if !validAdminPasswordLength([]byte(in.New)) {
-		return errors.New("password baru harus 8–1024 byte")
+		return errors.New("password baru harus 8–72 byte")
 	}
 	s.mu.Lock()
 	oldHash := s.state.AdminHash
