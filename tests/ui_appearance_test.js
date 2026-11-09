@@ -18,6 +18,8 @@ assert.match(html, /id="customBackgroundFile" type="file" accept="image\/png,ima
 assert.match(html, /id="applyCustomBackground"[^>]*>Terapkan<\/button>/, 'apply action is present');
 assert.match(html, /id="resetCustomBackground"[^>]*>Reset<\/button>/, 'reset action is present');
 assert.match(html, /id="chooseCustomBackground"[^>]*tabindex="0"[^>]*role="button"/, 'file picker is keyboard-focusable');
+assert.match(html, /id="chooseRestoreBackup" class="file-picker" tabindex="0" role="button">Pilih cadangan/, 'backup restore picker is keyboard-focusable');
+assert.ok(script.includes("$('chooseRestoreBackup').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('restoreFile').click()}});"), 'Enter and Space open the backup file picker');
 assert.match(html, /fetch\('\/api\/background'/, 'custom image is loaded from authenticated server endpoint');
 assert.match(script, /fetch\('\/api\/background',\{method:'PUT'/, 'custom image is uploaded to server');
 assert.match(script, /api\('\/api\/background',null,'DELETE'\)/, 'custom image can be deleted server-side');
