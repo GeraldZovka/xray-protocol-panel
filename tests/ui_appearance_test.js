@@ -61,6 +61,23 @@ assert.match(script, /element\('button','secondary',tr\('ML-DSA'\)\)/, 'ML-DSA b
 assert.match(script, /pqToggle\.title=pqActionLabel;pqToggle\.setAttribute\('aria-label',pqActionLabel\)/, 'ML-DSA button exposes a bilingual action title and accessible name');
 assert.ok(script.includes('"Muat ulang":"Refresh"'), 'reload label translates into English');
 assert.ok(script.includes('"Aktifkan ML-DSA-65":"Enable ML-DSA-65"') && script.includes('"Matikan ML-DSA-65":"Disable ML-DSA-65"'), 'ML-DSA action name translates into English');
+assert.match(compactStyle, /#app \.compact-disclosure summary\{cursor:pointer;color:var\(--muted\);font-size:10px;line-height:1\.3\}/, 'collapsed detail labels stay small and keyboard-discoverable');
+assert.match(script, /endpointInfo\.className='compact-disclosure endpoint-details'/, 'public endpoints are available in a collapsed native disclosure');
+assert.match(script, /pqInfo\.className='compact-disclosure pq-info'/, 'ML-DSA requirements are available in a collapsed native disclosure');
+assert.match(script, /tr\(item\.mldsa65Enabled\?'ML-DSA aktif · pqv · uji klien':'ML-DSA mati · tanpa pqv'\)/, 'ML-DSA state is reduced to a concise status');
+assert.ok(script.includes("tr('Hostname:443, SNI cocok, rantai >3500 B, X25519MLKEM768. ASN/handshake tidak diverifikasi; uji klien nyata.')"), 'essential ML-DSA requirements and handshake caveat remain available');
+assert.doesNotMatch(script, /Aktivasi mensyaratkan target hostname:443/, 'the long always-visible ML-DSA paragraph is removed');
+const conciseTranslations = [
+  ['Xray tetap berjalan meski semua profil berhenti.', 'Xray keeps running even when all profiles are stopped.'],
+  ['Kunci privat disamarkan.', 'Private keys are redacted.'],
+  ['Pilih profil dan protokol.', 'Choose a profile and protocol.'],
+  ['Disimpan dan diselaraskan ke perangkat lain.', 'Saved and synced across devices.'],
+  ['PNG, JPEG, atau WebP · maks. 5 MB.', 'PNG, JPEG, or WebP · max 5 MB.'],
+  ['Min. 8 karakter; gunakan kata sandi unik.', 'Min. 8 characters; use a unique password.'],
+  ['Backup berisi pengguna, konfigurasi, kunci REALITY & seed ML-DSA. Simpan aman.', 'Backup contains users, config, REALITY keys & ML-DSA seed. Store securely.'],
+  ['Update resmi; proxy bisa terputus sesaat.', 'Official update; proxy may briefly disconnect.'],
+];
+for (const [id, en] of conciseTranslations) assert.ok(script.includes(`${JSON.stringify(id)}:${JSON.stringify(en)}`), `short bilingual copy exists: ${id}`);
 
 const validatorLine = script.match(/^async function validateBackgroundFile\(file\)\{[^\n]*\}$/m)?.[0];
 assert.ok(validatorLine, 'image validator is present');
