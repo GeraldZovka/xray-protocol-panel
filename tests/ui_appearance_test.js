@@ -54,6 +54,7 @@ assert.match(compactStyle, /@media\(max-width:480px\)[\s\S]*?#app \.profile-acti
 assert.match(compactStyle, /#app \.profile-actions\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\);gap:5px\}/, 'all four inbound actions stay in one compact row on mobile');
 assert.match(compactStyle, /#app \.profile-actions button\{flex:initial;min-width:0;min-height:40px;height:40px;padding:4px 3px;font-size:10\.5px;line-height:1\.1;white-space:nowrap;overflow:hidden\}/, 'mobile action buttons are short, single-line, and remain tappable');
 assert.match(compactStyle, /body\[data-background="custom"\] #app \.top,body\[data-background="custom"\] #app \.file-picker\{background-color:var\(--glass\)[^}]*backdrop-filter:blur\(16px\) saturate\(145%\)/, 'custom backgrounds keep liquid-glass header and picker surfaces');
+assert.match(compactStyle, /@media\(prefers-reduced-motion:reduce\)\{html\{scroll-behavior:auto\}button\{transition:none\}button:active\{transform:none\}#app \.section\{animation:none\}\}/, 'reduced-motion preference disables smooth scrolling, button movement, and section animation');
 assert.match(compactStyle, /#app \.custom-preview\{height:88px/, 'custom background preview is compact');
 assert.match(script, /action:'mldsa65'/, 'per-inbound ML-DSA control remains available');
 assert.match(script, /element\('button','secondary',tr\('Muat ulang'\)\)/, 'reload button keeps its concise bilingual label');
