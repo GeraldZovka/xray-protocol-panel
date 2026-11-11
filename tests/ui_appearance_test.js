@@ -44,6 +44,7 @@ assert.match(script, /action:'addUser',name,inboundId/, 'new user request sends 
 assert.match(html, /© 2026 Gerald Zovka[\s\S]*?Repositori proyek/, 'footer uses a repository credit when no LICENSE file exists');
 assert.doesNotMatch(html, /Panel lokal untuk mengelola konektivitas server/, 'old footer text is removed');
 assert.doesNotMatch(script, /addEventListener\(['"]scroll/, 'background scaling is not changed by a scroll listener');
+assert.ok(script.includes("setInterval(()=>{if(!appView.classList.contains('hidden')&&!pendingBackgroundBlob&&!document.querySelector('#app details.edit-details[open],#app input:focus,#app textarea:focus,#app select:focus,dialog[open]'))loadState()},20000);"), 'background polling pauses while user drafts or dialogs are active');
 
 const compactStyle = html.match(/<style id="compact-ui">([\s\S]*?)<\/style>/)?.[1];
 assert.ok(compactStyle, 'compact layout overrides are present');

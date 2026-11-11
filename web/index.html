@@ -268,7 +268,7 @@ $('backupButton').addEventListener('click',()=>{window.location.href='/api/backu
 $('restoreFile').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(!confirm(tr('Pemulihan akan menimpa pengguna, profil, gambar latar, dan pengaturan saat ini. Lanjutkan?')))return;await api('/api/action',{action:'restore',backup});showMessage('Cadangan dipulihkan dan konfigurasi diterapkan.');await loadState()}catch(err){showMessage(err.message,'error')}finally{e.target.value=''}});
 $('updateButton').addEventListener('click',async()=>{if(!confirm(tr('Perbarui Xray? Layanan dapat terputus sesaat.')))return;$('updateButton').disabled=true;try{await api('/api/action',{action:'updateXray'});showMessage('Pembaruan Xray selesai.');await loadState()}catch(e){showMessage(e.message,'error')}finally{$('updateButton').disabled=false}});
 async function init(){try{await api('/api/state');await loadState()}catch(_){showLogin()}}
-if(location.hash&&document.querySelector(`[data-target="${location.hash.slice(1)}"]`))setTab(location.hash.slice(1));init();setInterval(()=>{if(!appView.classList.contains('hidden'))loadState()},20000);
+if(location.hash&&document.querySelector(`[data-target="${location.hash.slice(1)}"]`))setTab(location.hash.slice(1));init();setInterval(()=>{if(!appView.classList.contains('hidden')&&!pendingBackgroundBlob&&!document.querySelector('#app details.edit-details[open],#app input:focus,#app textarea:focus,#app select:focus,dialog[open]'))loadState()},20000);
 })();
 </script>
 </body>
