@@ -45,6 +45,10 @@ assert.match(html, /© 2026 Gerald Zovka[\s\S]*?Repositori proyek/, 'footer uses
 assert.doesNotMatch(html, /Panel lokal untuk mengelola konektivitas server/, 'old footer text is removed');
 assert.doesNotMatch(script, /addEventListener\(['"]scroll/, 'background scaling is not changed by a scroll listener');
 assert.ok(script.includes("setInterval(()=>{if(!appView.classList.contains('hidden')&&!pendingBackgroundBlob&&!document.querySelector('#app details.edit-details[open],#app input:focus,#app textarea:focus,#app select:focus,dialog[open]'))loadState()},20000);"), 'background polling pauses while user drafts or dialogs are active');
+assert.match(script, /function setTab\(id,writeHash=true\)/, 'tab changes can update the view without creating a new history entry');
+assert.match(script, /function syncTabFromHash\(\)\{const id=Array\.from\(document\.querySelectorAll\('\.tab'\)\)\.find\(b=>b\.dataset\.target===location\.hash\.slice\(1\)\)\?\.dataset\.target\|\|'dashboard';setTab\(id,false\)\}/, 'browser history selects the tab matching the current hash');
+assert.match(script, /window\.addEventListener\('hashchange',syncTabFromHash\)/, 'Back and Forward navigation updates the visible tab');
+assert.ok(script.includes('if(location.hash)syncTabFromHash();init();'), 'a direct link to a tab is restored without adding a history entry');
 
 const compactStyle = html.match(/<style id="compact-ui">([\s\S]*?)<\/style>/)?.[1];
 assert.ok(compactStyle, 'compact layout overrides are present');

@@ -225,7 +225,9 @@ function showMessage(text,kind='success'){message.className=kind==='error'?'noti
 function showLogin(){appView.classList.add('hidden');loginView.classList.remove('hidden')}
 function showApp(){loginView.classList.add('hidden');appView.classList.remove('hidden')}
 async function api(path,body=null,method=null,extraHeaders={}){const verb=method||(body?'POST':'GET'),headers={...extraHeaders};if(!['GET','HEAD'].includes(verb))headers['X-CSRF-Token']=csrf;const opts={method:verb,credentials:'same-origin',headers};if(body!==null&&body!==undefined){headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}const r=await fetch(path,opts),ct=r.headers.get('content-type')||'';const data=ct.includes('application/json')?await r.json():null;if(r.status===401){showLogin();throw Error(tr('Sesi berakhir, silakan masuk lagi.'))}if(!r.ok)throw Error(tr(data?.error||'Permintaan gagal ({status})',{status:r.status}));return data}
-function setTab(id){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.target===id));location.hash=id}
+function setTab(id,writeHash=true){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.target===id));if(writeHash)location.hash=id}
+function syncTabFromHash(){const id=Array.from(document.querySelectorAll('.tab')).find(b=>b.dataset.target===location.hash.slice(1))?.dataset.target||'dashboard';setTab(id,false)}
+window.addEventListener('hashchange',syncTabFromHash);
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.target)));
 function applyTheme(theme){const value=theme==='dark'?'dark':'light';document.body.dataset.theme=value;try{localStorage.setItem('xray-panel-theme',value)}catch(_){}$('themeButton').textContent=tr(value==='dark'?'Terang':'Gelap');$('themeButton').title=tr('Ganti tema');$('themeButton').setAttribute('aria-label',tr('Ganti tema'))}
 applyTheme((()=>{try{return localStorage.getItem('xray-panel-theme')}catch(_){return 'light'}})()||'light');
@@ -268,7 +270,7 @@ $('backupButton').addEventListener('click',()=>{window.location.href='/api/backu
 $('restoreFile').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{const backup=JSON.parse(await file.text());if(!confirm(tr('Pemulihan akan menimpa pengguna, profil, gambar latar, dan pengaturan saat ini. Lanjutkan?')))return;await api('/api/action',{action:'restore',backup});showMessage('Cadangan dipulihkan dan konfigurasi diterapkan.');await loadState()}catch(err){showMessage(err.message,'error')}finally{e.target.value=''}});
 $('updateButton').addEventListener('click',async()=>{if(!confirm(tr('Perbarui Xray? Layanan dapat terputus sesaat.')))return;$('updateButton').disabled=true;try{await api('/api/action',{action:'updateXray'});showMessage('Pembaruan Xray selesai.');await loadState()}catch(e){showMessage(e.message,'error')}finally{$('updateButton').disabled=false}});
 async function init(){try{await api('/api/state');await loadState()}catch(_){showLogin()}}
-if(location.hash&&document.querySelector(`[data-target="${location.hash.slice(1)}"]`))setTab(location.hash.slice(1));init();setInterval(()=>{if(!appView.classList.contains('hidden')&&!pendingBackgroundBlob&&!document.querySelector('#app details.edit-details[open],#app input:focus,#app textarea:focus,#app select:focus,dialog[open]'))loadState()},20000);
+if(location.hash)syncTabFromHash();init();setInterval(()=>{if(!appView.classList.contains('hidden')&&!pendingBackgroundBlob&&!document.querySelector('#app details.edit-details[open],#app input:focus,#app textarea:focus,#app select:focus,dialog[open]'))loadState()},20000);
 })();
 </script>
 </body>
