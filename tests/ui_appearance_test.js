@@ -14,6 +14,7 @@ assert.match(html, /<option value="custom">Gambar khusus<\/option>/, 'custom mod
 assert.match(html, /id="languageSelect"[\s\S]*?<option value="id">Bahasa Indonesia<\/option>[\s\S]*?<option value="en">English<\/option>/, 'Indonesian and English can be selected in Settings');
 assert.match(script, /xray-panel-language/, 'language choice is persisted in the browser');
 assert.match(script, /document\.documentElement\.lang=language/, 'document language follows the selected language');
+assert.match(html, /class="big status" role="status" aria-live="polite" aria-atomic="true"><span id="statusDot"/, 'dynamic Xray service status is announced to screen readers');
 assert.match(html, /id="customBackgroundFile" type="file" accept="image\/png,image\/jpeg,image\/webp"/, 'file picker restricts image formats');
 assert.match(html, /id="applyCustomBackground"[^>]*>Terapkan<\/button>/, 'apply action is present');
 assert.match(html, /id="resetCustomBackground"[^>]*>Reset<\/button>/, 'reset action is present');
