@@ -42,6 +42,12 @@ assert.ok(script.includes("del.textContent=tr('Hapus')"), 'user delete button fo
 assert.ok(script.includes("element('button','danger',tr('Hapus'))"), 'inbound delete button follows the selected language');
 assert.match(html, /id="newUserInbound" required/, 'new-user profile selection is mandatory');
 assert.match(script, /action:'addUser',name,inboundId/, 'new user request sends its selected profile');
+assert.ok([
+  "nameInput.id=`profileName-${item.id}`;const nameLabel=element('label','',tr('Nama profil'));nameLabel.htmlFor=nameInput.id;",
+  "portInput.id=`profilePort-${item.id}`;const portLabel=element('label','',tr('Port internal'));portLabel.htmlFor=portInput.id;",
+  "modeSelect.id=`profileMode-${item.id}`;const modeLabel=element('label','',tr('Transport / mode'));modeLabel.htmlFor=modeSelect.id;",
+  "area.id=`profileMappings-${item.id}`;const mapLabel=element('label','',tr('Endpoint publik · satu per baris'));mapLabel.htmlFor=area.id;",
+].every(fragment => script.includes(fragment)), 'inbound profile editor fields have associated visible labels');
 assert.match(html, /© 2026 Gerald Zovka[\s\S]*?Repositori proyek/, 'footer uses a repository credit when no LICENSE file exists');
 assert.doesNotMatch(html, /Panel lokal untuk mengelola konektivitas server/, 'old footer text is removed');
 assert.doesNotMatch(script, /addEventListener\(['"]scroll/, 'background scaling is not changed by a scroll listener');
