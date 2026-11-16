@@ -49,6 +49,8 @@ assert.ok([
   "modeSelect.id=`profileMode-${item.id}`;const modeLabel=element('label','',tr('Transport / mode'));modeLabel.htmlFor=modeSelect.id;",
   "area.id=`profileMappings-${item.id}`;const mapLabel=element('label','',tr('Endpoint publik · satu per baris'));mapLabel.htmlFor=area.id;",
 ].every(fragment => script.includes(fragment)), 'inbound profile editor fields have associated visible labels');
+assert.match(html, /id="newInboundMappings"[^>]*spellcheck="false"[^>]*autocapitalize="off"/, 'new endpoint mappings avoid spellcheck and capitalization');
+assert.ok(script.includes("area.setAttribute('spellcheck','false');area.setAttribute('autocapitalize','off');"), 'edited endpoint mappings avoid spellcheck and capitalization');
 assert.match(html, /© 2026 Gerald Zovka[\s\S]*?Repositori proyek/, 'footer uses a repository credit when no LICENSE file exists');
 assert.doesNotMatch(html, /Panel lokal untuk mengelola konektivitas server/, 'old footer text is removed');
 assert.doesNotMatch(script, /addEventListener\(['"]scroll/, 'background scaling is not changed by a scroll listener');
