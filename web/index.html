@@ -198,7 +198,7 @@ body[data-theme="dark"][data-background="custom"] #app .card{box-shadow:0 8px 22
   </section>
   <footer class="footer">© 2026 Gerald Zovka · <a href="https://github.com/GeraldZovka/xray-protocol-panel" target="_blank" rel="noopener noreferrer">Repositori proyek</a></footer>
 </div>
-<dialog id="addInboundDialog" class="dialog"><div class="dialog-inner"><div class="row"><h2>Tambah profil</h2><button type="button" class="secondary" id="closeAddProfile">Tutup</button></div>
+<dialog id="addInboundDialog" class="dialog" aria-labelledby="addInboundTitle"><div class="dialog-inner"><div class="row"><h2 id="addInboundTitle">Tambah profil</h2><button type="button" class="secondary" id="closeAddProfile">Tutup</button></div>
   <form id="addInboundForm" class="formgrid" style="margin-top:12px">
     <div class="field"><label for="newInboundName">Nama profil</label><input id="newInboundName" maxlength="64" required placeholder="mis. VLESS kantor"></div>
     <div class="field"><label for="newInboundProtocol">Protokol</label><select id="newInboundProtocol"><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="shadowsocks">Shadowsocks</option></select></div>
@@ -207,7 +207,7 @@ body[data-theme="dark"][data-background="custom"] #app .card{box-shadow:0 8px 22
     <div class="field" style="grid-column:1/-1"><label for="newInboundMappings">Endpoint publik · satu per baris</label><textarea id="newInboundMappings" rows="2" maxlength="2340" placeholder="host:port" spellcheck="false" autocapitalize="off"></textarea></div>
     <div class="actions" style="grid-column:1/-1"><button type="submit">Tambah profil</button><button class="secondary" type="button" id="cancelAddProfile">Batal</button></div>
   </form></div></dialog>
-<dialog id="qrDialog" class="dialog"><div class="dialog-inner"><div class="row"><h2>QR koneksi</h2><button type="button" class="secondary" id="closeQR">Tutup</button></div><img id="qrImage" class="qrimg" alt="QR code koneksi"><div class="field"><label for="qrLink">Tautan koneksi</label><input id="qrLink" readonly></div><div class="actions" style="margin-top:10px"><button id="copyQRLink">Salin tautan</button></div></div></dialog>
+<dialog id="qrDialog" class="dialog" aria-labelledby="qrDialogTitle"><div class="dialog-inner"><div class="row"><h2 id="qrDialogTitle">QR koneksi</h2><button type="button" class="secondary" id="closeQR">Tutup</button></div><img id="qrImage" class="qrimg" alt="QR code koneksi"><div class="field"><label for="qrLink">Tautan koneksi</label><input id="qrLink" readonly></div><div class="actions" style="margin-top:10px"><button id="copyQRLink">Salin tautan</button></div></div></dialog>
 <script>
 (()=>{'use strict';
 let csrf='',current=null,serverBackgroundURL='',serverBackgroundRevision=null,pendingBackgroundURL='',pendingBackgroundBlob=null;
