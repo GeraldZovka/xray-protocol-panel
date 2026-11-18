@@ -156,8 +156,8 @@ body[data-theme="dark"][data-background="custom"] #app .card{box-shadow:0 8px 22
   </header>
   <div id="httpWarning" class="notice hidden"><strong>Koneksi HTTP.</strong> Gunakan HTTPS pada jaringan publik.</div>
   <div id="message" class="hidden" role="status" aria-live="polite"></div>
-  <nav class="tabs" aria-label="Navigasi utama"><button class="tab active" data-target="dashboard">Dashboard</button><button class="tab" data-target="settings">Pengaturan</button><button class="tab" data-target="security">Keamanan</button></nav>
-  <section id="dashboard" class="section">
+  <nav class="tabs" role="tablist" aria-label="Navigasi utama"><button id="tabDashboard" class="tab active" role="tab" aria-controls="dashboard" aria-selected="true" tabindex="0" data-target="dashboard">Dashboard</button><button id="tabSettings" class="tab" role="tab" aria-controls="settings" aria-selected="false" tabindex="-1" data-target="settings">Pengaturan</button><button id="tabSecurity" class="tab" role="tab" aria-controls="security" aria-selected="false" tabindex="-1" data-target="security">Keamanan</button></nav>
+  <section id="dashboard" class="section" role="tabpanel" aria-labelledby="tabDashboard" tabindex="0">
     <div class="grid">
       <article class="card"><div class="metric-label">Layanan Xray</div><div class="big status" role="status" aria-live="polite" aria-atomic="true"><span id="statusDot" class="dot"></span><span id="statusText">Memuat…</span></div><div class="metric-sub" id="versionText">Versi —</div></article>
       <article class="card"><div class="metric-label">Waktu aktif Xray</div><div class="big" id="uptimeText">—</div><div class="metric-sub">Waktu layanan aktif</div></article>
@@ -181,7 +181,7 @@ body[data-theme="dark"][data-background="custom"] #app .card{box-shadow:0 8px 22
       <div id="usersList" style="margin-top:10px"></div>
     </article>
   </section>
-  <section id="settings" class="section hidden">
+  <section id="settings" class="section hidden" role="tabpanel" aria-labelledby="tabSettings" tabindex="0">
     <article class="card"><div class="section-title"><div><h2>Tampilan</h2><p class="muted small">Disimpan dan diselaraskan ke perangkat lain.</p></div></div>
       <div class="formgrid" style="margin-top:12px"><div class="field"><label for="backgroundSelect">Latar belakang</label><select id="backgroundSelect"><option value="neutral">Netral</option><option value="sky">Langit</option><option value="mint">Mint</option><option value="sunset">Senja</option><option value="custom">Gambar khusus</option></select></div><div class="field"><label>Tema warna</label><button type="button" class="secondary" id="settingsThemeButton">Ganti tema terang / gelap</button></div><div class="field"><label for="languageSelect">Bahasa</label><select id="languageSelect"><option value="id">Bahasa Indonesia</option><option value="en">English</option></select></div></div>
     </article>
@@ -191,7 +191,7 @@ body[data-theme="dark"][data-background="custom"] #app .card{box-shadow:0 8px 22
       <div id="customBackgroundPreview" class="custom-preview hidden" role="img" aria-label="Pratinjau gambar latar"></div>
     </article>
   </section>
-  <section id="security" class="section hidden">
+  <section id="security" class="section hidden" role="tabpanel" aria-labelledby="tabSecurity" tabindex="0">
     <article class="card"><h2>Kata sandi admin</h2><p class="muted small">Min. 8 karakter; gunakan kata sandi unik.</p><form id="passwordForm" class="stack"><div class="formgrid"><div class="field"><label for="currentPassword">Kata sandi saat ini</label><input id="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label for="newPassword">Kata sandi baru</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required></div></div><button>Ganti kata sandi</button></form></article>
     <article class="card"><h2>Backup &amp; restore</h2><p class="muted small">Backup berisi pengguna, konfigurasi, kunci REALITY & seed ML-DSA. Simpan aman.</p><div class="actions"><button id="backupButton">Unduh cadangan</button><label id="chooseRestoreBackup" class="file-picker" tabindex="0" role="button">Pilih cadangan<input id="restoreFile" type="file" accept="application/json,.json" hidden></label></div></article>
     <article class="card"><h2>Pembaruan Xray</h2><p class="muted small">Update resmi; proxy bisa terputus sesaat.</p><button class="secondary" id="updateButton">Perbarui Xray</button></article>
@@ -225,10 +225,10 @@ function showMessage(text,kind='success'){message.className=kind==='error'?'noti
 function showLogin(){appView.classList.add('hidden');loginView.classList.remove('hidden')}
 function showApp(){loginView.classList.add('hidden');appView.classList.remove('hidden')}
 async function api(path,body=null,method=null,extraHeaders={}){const verb=method||(body?'POST':'GET'),headers={...extraHeaders};if(!['GET','HEAD'].includes(verb))headers['X-CSRF-Token']=csrf;const opts={method:verb,credentials:'same-origin',headers};if(body!==null&&body!==undefined){headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}const r=await fetch(path,opts),ct=r.headers.get('content-type')||'';const data=ct.includes('application/json')?await r.json():null;if(r.status===401){showLogin();throw Error(tr('Sesi berakhir, silakan masuk lagi.'))}if(!r.ok)throw Error(tr(data?.error||'Permintaan gagal ({status})',{status:r.status}));return data}
-function setTab(id,writeHash=true){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.target===id));if(writeHash)location.hash=id}
+function setTab(id,writeHash=true){document.querySelectorAll('.section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>{const active=x.dataset.target===id;x.classList.toggle('active',active);x.setAttribute('aria-selected',String(active));x.tabIndex=active?0:-1});if(writeHash)location.hash=id}
 function syncTabFromHash(){const id=Array.from(document.querySelectorAll('.tab')).find(b=>b.dataset.target===location.hash.slice(1))?.dataset.target||'dashboard';setTab(id,false)}
 window.addEventListener('hashchange',syncTabFromHash);
-document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.target)));
+document.querySelectorAll('.tab').forEach(b=>{b.addEventListener('click',()=>setTab(b.dataset.target));b.addEventListener('keydown',e=>{const tabs=Array.from(document.querySelectorAll('.tab')),index=tabs.indexOf(b);let next;if(e.key==='ArrowRight')next=(index+1)%tabs.length;else if(e.key==='ArrowLeft')next=(index-1+tabs.length)%tabs.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=tabs.length-1;else return;e.preventDefault();tabs[next].focus();setTab(tabs[next].dataset.target)})});
 function applyTheme(theme){const value=theme==='dark'?'dark':'light';document.body.dataset.theme=value;try{localStorage.setItem('xray-panel-theme',value)}catch(_){}$('themeButton').textContent=tr(value==='dark'?'Terang':'Gelap');$('themeButton').title=tr('Ganti tema');$('themeButton').setAttribute('aria-label',tr('Ganti tema'))}
 applyTheme((()=>{try{return localStorage.getItem('xray-panel-theme')}catch(_){return 'light'}})()||'light');
 applyLanguage(language,false);$('languageSelect').addEventListener('change',()=>applyLanguage($('languageSelect').value));

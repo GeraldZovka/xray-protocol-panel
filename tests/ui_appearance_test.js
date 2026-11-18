@@ -61,6 +61,12 @@ assert.match(script, /function setTab\(id,writeHash=true\)/, 'tab changes can up
 assert.match(script, /function syncTabFromHash\(\)\{const id=Array\.from\(document\.querySelectorAll\('\.tab'\)\)\.find\(b=>b\.dataset\.target===location\.hash\.slice\(1\)\)\?\.dataset\.target\|\|'dashboard';setTab\(id,false\)\}/, 'browser history selects the tab matching the current hash');
 assert.match(script, /window\.addEventListener\('hashchange',syncTabFromHash\)/, 'Back and Forward navigation updates the visible tab');
 assert.ok(script.includes('if(location.hash)syncTabFromHash();init();'), 'a direct link to a tab is restored without adding a history entry');
+assert.match(html, /<nav class="tabs" role="tablist" aria-label="Navigasi utama">/, 'section navigation is exposed as a tablist');
+assert.match(html, /id="tabDashboard" class="tab active" role="tab" aria-controls="dashboard" aria-selected="true" tabindex="0"/, 'the selected dashboard tab is announced and keyboard-focusable');
+assert.match(html, /id="tabSettings" class="tab" role="tab" aria-controls="settings" aria-selected="false" tabindex="-1"/, 'inactive tabs are removed from the sequential focus order');
+assert.match(html, /section id="dashboard" class="section" role="tabpanel" aria-labelledby="tabDashboard" tabindex="0"/, 'dashboard section is associated with its tab');
+assert.match(script, /x\.setAttribute\('aria-selected',String\(active\)\);x\.tabIndex=active\?0:-1/, 'tab changes update selected state and roving focus');
+assert.ok(['ArrowRight','ArrowLeft','Home','End'].every(key => script.includes(`e.key==='${key}'`)), 'tab list supports arrow and boundary-key navigation');
 
 const compactStyle = html.match(/<style id="compact-ui">([\s\S]*?)<\/style>/)?.[1];
 assert.ok(compactStyle, 'compact layout overrides are present');
