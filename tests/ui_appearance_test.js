@@ -14,6 +14,9 @@ assert.match(html, /<option value="custom">Gambar khusus<\/option>/, 'custom mod
 assert.match(html, /id="languageSelect"[\s\S]*?<option value="id">Bahasa Indonesia<\/option>[\s\S]*?<option value="en">English<\/option>/, 'Indonesian and English can be selected in Settings');
 assert.match(script, /xray-panel-language/, 'language choice is persisted in the browser');
 assert.match(script, /document\.documentElement\.lang=language/, 'document language follows the selected language');
+assert.ok(script.includes('"Ganti ke tema terang":"Switch to light theme"') && script.includes('"Ganti ke tema gelap":"Switch to dark theme"'), 'theme actions have English translations');
+assert.ok(script.includes("const actionLabel=tr(value==='dark'?'Ganti ke tema terang':'Ganti ke tema gelap');") && script.includes("$('themeButton').setAttribute('aria-label',actionLabel)") && script.includes("$('settingsThemeButton').setAttribute('aria-label',actionLabel)"), 'theme toggles announce their target mode');
+assert.ok(script.includes("$('settingsThemeButton').textContent=actionLabel"), 'settings theme action names its target mode');
 assert.match(html, /class="big status" role="status" aria-live="polite" aria-atomic="true"><span id="statusDot"/, 'dynamic Xray service status is announced to screen readers');
 assert.match(script, /const serviceStatus=tr\(s\.running\?'Berjalan':'Berhenti'\);if\(\$\('statusText'\)\.textContent!==serviceStatus\)\$\('statusText'\)\.textContent=serviceStatus/, 'unchanged service status is not announced again on every poll');
 assert.match(html, /<dialog id="addInboundDialog" class="dialog" aria-labelledby="addInboundTitle">[\s\S]*?<h2 id="addInboundTitle">/, 'add-profile dialog has an accessible heading');
