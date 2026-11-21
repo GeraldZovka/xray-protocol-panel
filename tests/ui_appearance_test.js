@@ -59,6 +59,8 @@ assert.ok(script.includes("area.setAttribute('spellcheck','false');area.setAttri
 assert.match(html, /© 2026 Gerald Zovka[\s\S]*?Repositori proyek/, 'footer uses a repository credit when no LICENSE file exists');
 assert.doesNotMatch(html, /Panel lokal untuk mengelola konektivitas server/, 'old footer text is removed');
 assert.doesNotMatch(script, /addEventListener\(['"]scroll/, 'background scaling is not changed by a scroll listener');
+assert.match(script, /const logBox=\$\('logs'\),oldLogScrollTop=logBox\.scrollTop,wasAtBottom=logBox\.scrollHeight-logBox\.scrollTop-logBox\.clientHeight<24;logBox\.textContent=/, 'log refresh remembers the current reading position');
+assert.ok(script.includes('logBox.scrollTop=wasAtBottom?logBox.scrollHeight:oldLogScrollTop;'), 'log refresh follows new lines only when already at the bottom');
 assert.ok(script.includes("function refreshStateIfReady(){if(!document.hidden&&!appView.classList.contains('hidden')&&!pendingBackgroundBlob&&!document.querySelector('#app details.edit-details[open],#app input:focus,#app textarea:focus,#app select:focus,dialog[open]'))loadState()}"), 'background polling pauses while hidden or while user drafts and dialogs are active');
 assert.ok(script.includes("document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshStateIfReady()});"), 'dashboard refreshes when its browser tab becomes visible');
 assert.ok(script.includes('setInterval(refreshStateIfReady,20000);'), 'dashboard continues periodic refresh while active');
